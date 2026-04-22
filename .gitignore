@@ -1,0 +1,40 @@
+# ── Environment & Secrets ──
+.env
+*.pem
+*.key
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+
+# ── Node.js ──
+node_modules/
+.next/
+out/
+frontend/.env.local
+
+# ── Data (keep sample, ignore uploads) ──
+data/uploads/
+*.pdf
+!data/sample_papers/*.pdf
+
+# ── Docker ──
+*.log
+
+# ── IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# ── Misc ──
+detai_extracted.txt
