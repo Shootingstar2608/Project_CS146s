@@ -7,13 +7,10 @@ Lưu metadata tài liệu, lịch sử chat. Graph data nằm trong Neo4j.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Integer, String, Text, Enum
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import Column, DateTime, Integer, String, Text
 
-
-class Base(DeclarativeBase):
-    """Base class cho tất cả ORM models."""
-    pass
+# Use the shared Base from database so create_all_tables() picks up these tables
+from app.core.database import Base
 
 
 class Document(Base):

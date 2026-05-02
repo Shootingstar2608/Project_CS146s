@@ -3,6 +3,8 @@
 *.pem
 *.key
 
+
+requirements.txt
 # ── Python ──
 __pycache__/
 *.py[cod]
@@ -28,6 +30,7 @@ data/uploads/
 
 # ── Docker ──
 *.log
+Dockerfile
 
 # ── IDE ──
 .vscode/

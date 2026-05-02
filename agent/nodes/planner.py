@@ -21,7 +21,7 @@ Trả về kế hoạch, mỗi bước trên 1 dòng bắt đầu bằng số th
 
 def plan_steps(state: AgentState) -> dict:
     """Node: Phân tích câu hỏi → lập kế hoạch multi-step."""
-    from backend.app.core.llm_client import get_llm
+    from app.core.llm_client import get_llm
 
     llm = get_llm()
 

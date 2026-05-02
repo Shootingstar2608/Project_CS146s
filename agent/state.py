@@ -1,35 +1,53 @@
 """
-Agent State — Định nghĩa trạng thái chia sẻ giữa các node trong LangGraph.
+Agent State — Shared state across all LangGraph nodes.
+
+Extended with hybrid retrieval fields:
+  - vector_chunks:    raw vector-retrieved chunks (for citations)
+  - retrieval_mode:   "kg" | "vector" | "hybrid"
+  - alpha:            fusion weight actually used
+  - alpha_override:   optional per-request override from API caller
 """
 
-from typing import Annotated
+from typing import Annotated, List
 from typing_extensions import TypedDict
 from langgraph.graph.message import add_messages
 
 
 class AgentState(TypedDict):
-    """State chạy xuyên suốt LangGraph graph."""
+    """State shared across all LangGraph nodes."""
 
-    # Tin nhắn tích lũy (LangGraph tự merge nhờ add_messages)
+    # Accumulated messages (LangGraph merge)
     messages: Annotated[list, add_messages]
 
-    # Câu hỏi gốc từ user
+    # Original user question
     user_query: str
 
-    # Kế hoạch suy luận do Planner tạo
-    plan: list[str]
+    # Multi-step plan from Planner
+    plan: List[str]
 
-    # Bước hiện tại trong plan
+    # Current plan step index
     current_step: int
 
-    # Context thu thập từ Graph
-    retrieved_context: list[dict]
+    # KG facts accumulated across retrieval steps
+    retrieved_context: List[dict]
 
-    # Câu trả lời cuối cùng
+    # NEW: Semantic chunks from vector retrieval
+    vector_chunks: List[dict]
+
+    # Final synthesized answer
     final_answer: str
 
-    # Dữ liệu graph cho visualization
+    # Graph data for frontend visualization
     graph_data: dict
 
-    # Cờ: cần tìm thêm info không
+    # Whether more info is needed (legacy flag, kept for compatibility)
     needs_more_info: bool
+
+    # NEW: Retrieval mode used ("kg" | "vector" | "hybrid")
+    retrieval_mode: str
+
+    # NEW: Fusion alpha weight used in this run
+    alpha: float
+
+    # NEW: Optional per-query alpha override from API caller (None = use router)
+    alpha_override: float | None

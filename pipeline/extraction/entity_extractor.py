@@ -18,7 +18,7 @@ def extract_entities_from_text(
     Trích xuất entities và relations từ 1 đoạn text bằng LLM.
     """
     if llm is None:
-        from backend.app.core.llm_client import get_llm
+        from app.core.llm_client import get_llm
         llm = get_llm()
 
     client = instructor.from_langchain(llm)
@@ -39,7 +39,7 @@ def extract_paper_metadata(text: str, llm=None) -> PaperMetadata:
     Trích xuất metadata từ phần đầu paper.
     """
     if llm is None:
-        from backend.app.core.llm_client import get_llm
+        from app.core.llm_client import get_llm
         llm = get_llm()
 
     client = instructor.from_langchain(llm)
