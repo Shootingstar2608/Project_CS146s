@@ -41,3 +41,8 @@ Dockerfile
 
 # ── Misc ──
 detai_extracted.txt
+
+
+# -- docs--
+architecture_overview.md
+implementation_plan.md
