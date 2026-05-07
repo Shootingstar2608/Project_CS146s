@@ -4,6 +4,9 @@
 *.key
 
 
+data/huggingface_cache/
+.cache/
+
 requirements.txt
 # ── Python ──
 __pycache__/
