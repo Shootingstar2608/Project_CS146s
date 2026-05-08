@@ -2,6 +2,7 @@
 .env
 *.pem
 *.key
+.venv-be
 
 # ── Python ──
 __pycache__/
