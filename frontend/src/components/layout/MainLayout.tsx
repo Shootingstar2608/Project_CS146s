@@ -14,7 +14,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       <Sidebar />
       <div className="pl-20">
         <Topbar />
-        <main className="mx-auto mt-[60px] max-w-[1400px] p-10">
+        <main className="mx-auto mt-[60px] max-w-[1400px] p-4 sm:p-6 lg:p-10">
           {children}
         </main>
       </div>
