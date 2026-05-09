@@ -43,9 +43,15 @@ class ChatResponse(BaseModel):
 # ════════════════════════════════════════
 class GraphNode(BaseModel):
     id: str
-    label: str
-    type: str = Field(..., description="Paper | Author | Method | Metric | Dataset")
+    label: str | None = Field(default=None, description="Display label (fallback to id if not provided)")
+    type: str = Field(..., description="Paper | Author | Method | Metric | Dataset | Topic | Methodology | Result")
     properties: dict = Field(default_factory=dict)
+
+    def __init__(self, **data):
+        """Auto-fill label from id if not provided."""
+        if "label" not in data or data["label"] is None:
+            data["label"] = data.get("id", "")
+        super().__init__(**data)
 
 
 class GraphEdge(BaseModel):

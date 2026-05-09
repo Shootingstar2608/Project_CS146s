@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  --color-aubergine: #3A2E3D;
+  --color-terracotta: #C25A4D;
+  --color-cream-light: #F5F0E8;
+  --color-cream-dark: #EBE3D5;
+  --color-surface: #FEFCF8;
+  
+  /* Semantic Aliases */
+  --color-primary: var(--color-aubergine);
+  --color-accent: var(--color-terracotta);
+  
+  /* Pastels */
+  --color-sage: #BFD4BC;
+  --color-rose: #EFC8C8;
+  --color-peach: #F5D5B0;
+  --color-lilac: #D8C8E8;
+  --color-sky: #C5D4E0;
+
+  /* Shadows */
+  --shadow-soft: 0 4px 20px -2px rgba(58, 46, 61, 0.06);
+  --shadow-deep: 0 10px 30px -4px rgba(58, 46, 61, 0.12);
+
+  /* Typography */
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+:root {
+  --background: var(--color-cream-light);
+  --foreground: var(--color-aubergine);
+}
+
+body {
+  background: linear-gradient(to bottom, var(--color-cream-light), var(--color-cream-dark));
+  color: var(--color-aubergine);
+  min-height: 100vh;
+  margin: 0;
+}
+
+/* Global utility for glass effect as per spec */
+.glass {
+  background: rgba(254, 252, 248, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}

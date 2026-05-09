@@ -32,7 +32,7 @@ class Document(Base):
     entity_count = Column(Integer, default=0)
     relation_count = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)
-    uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
 
 
@@ -42,7 +42,7 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class ChatMessage(Base):
@@ -55,4 +55,4 @@ class ChatMessage(Base):
     role = Column(String(20), nullable=False, comment="user | assistant")
     content = Column(Text, nullable=False)
     reasoning_steps = Column(Text, nullable=True, comment="JSON string of reasoning steps")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=datetime.utcnow)

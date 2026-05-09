@@ -29,7 +29,14 @@ lint:
 	cd pipeline && ruff check . --fix
 	cd agent && ruff check . --fix
 
-# ── Dọn dẹp ──
+# ── Dọn dẹp toàn bộ (xoá sạch container & data volume) ──
 clean:
 	docker compose down -v --rmi local
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
+# ── Xoá sạch data trong Database nhưng vẫn giữ container chạy ──
+reset-db:
+	docker exec -i graphrag_neo4j cypher-shell -u neo4j -p graphrag_secret_2024 "MATCH (n) DETACH DELETE n;"
+	docker exec -i graphrag_postgres psql -U postgres -d graphrag -c "TRUNCATE documents;"
+	rm -f data/uploads/*.pdf
+	echo "Đã dọn dẹp sạch Database và file uploads!"

@@ -35,14 +35,14 @@ def build_agent_graph():
     """
     graph = StateGraph(AgentState)
 
-    graph.add_node("plan", plan_steps)
+    graph.add_node("planner_node", plan_steps)
     graph.add_node("retrieve", retrieve_from_graph)
     graph.add_node("synthesize", synthesize_answer)
 
-    graph.set_entry_point("plan")
+    graph.set_entry_point("planner_node")
 
     # Sau plan → đi retrieve bước đầu tiên
-    graph.add_edge("plan", "retrieve")
+    graph.add_edge("planner_node", "retrieve")
 
     # Sau retrieve → kiểm tra còn bước nào trong plan không
     graph.add_conditional_edges("retrieve", should_continue, {
@@ -59,8 +59,20 @@ def build_agent_graph():
 agent_executor = build_agent_graph()
 
 
-async def run_agent(user_query: str) -> dict:
-    """Entry point: chạy Agent cho 1 câu hỏi."""
+async def run_agent(
+    user_query: str,
+    alpha_override: float | None = None,
+    top_k: int = 5,
+) -> dict:
+    """
+    Entry point: chạy Agent cho 1 câu hỏi.
+
+    Args:
+        user_query:     Câu hỏi đã được sanitize từ router_chat.
+        alpha_override: Tỷ lệ blend graph/vector (0.0=vector-only, 1.0=graph-only).
+                        None → dùng giá trị mặc định của retriever (0.5).
+        top_k:          Số kết quả tối đa mỗi retriever trả về.
+    """
     initial_state = {
         "messages": [],
         "user_query": user_query,
@@ -70,6 +82,9 @@ async def run_agent(user_query: str) -> dict:
         "final_answer": "",
         "graph_data": {"nodes": [], "edges": []},
         "needs_more_info": False,
+        # Hybrid retrieval params — used by retriever node if implemented
+        "alpha": alpha_override if alpha_override is not None else 0.5,
+        "top_k": top_k,
     }
 
     result = await agent_executor.ainvoke(initial_state)

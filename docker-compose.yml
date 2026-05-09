@@ -24,7 +24,7 @@ services:
     image: postgres:15-alpine
     container_name: graphrag_postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_secret_2024}
@@ -99,7 +99,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
     depends_on:
       - backend
     restart: unless-stopped
