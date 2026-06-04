@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     faiss_index_path: str = "/app/data/faiss_index"
     chunk_size: int = 512
     chunk_overlap: int = 64
+    rrf_k: int = 60
+    rerank_enabled: bool = False
+    rerank_top_n: int = 5
+    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
     model_config = SettingsConfigDict(
         env_file=".env",

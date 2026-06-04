@@ -22,8 +22,15 @@ async def get_documents(db: AsyncSession = Depends(get_db)):
         from app.core.neo4j_client import Neo4jClient
         query = """
         MATCH (p:Paper)
-        OPTIONAL MATCH (p)-[:AUTHORED_BY]->(a:Author)
-        RETURN p.paper_id AS paper_id, p.name AS title, p.year AS year, p.categories AS categories, p.abstract AS abstract, collect(a.name) AS authors, p.keywords AS keywords
+        OPTIONAL MATCH (p)<-[:AUTHORED]-(a:Author)
+        OPTIONAL MATCH (p)-[:AUTHORED_BY]->(legacy:Author)
+        RETURN p.paper_id AS paper_id,
+               p.name AS title,
+               p.year AS year,
+               p.categories AS categories,
+               p.abstract AS abstract,
+               collect(DISTINCT a.name) + collect(DISTINCT legacy.name) AS authors,
+               p.keywords AS keywords
         """
         neo_results = Neo4jClient.execute_query(query)
         for r in neo_results:

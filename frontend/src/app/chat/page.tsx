@@ -1,6 +1,6 @@
 "use client";
 
-import React, { ChangeEvent, KeyboardEvent, useMemo, useRef, useState } from "react";
+import React, { ChangeEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ChevronRight,
@@ -14,32 +14,29 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { NewPaperInput, useResearchStore } from "@/lib/research-store";
+import { BackendPaper, getDocuments, getErrorMessage, sendMessage as sendBackendMessage, uploadDocument } from "@/lib/api";
+import { useResearchStore } from "@/lib/research-store";
 import { cn } from "@/lib/utils";
-
-async function fileToPaperInput(file: File): Promise<NewPaperInput> {
-  const canRead = /text|json|csv|markdown/.test(file.type) || /\.(txt|md|csv|json)$/i.test(file.name);
-  return {
-    fileName: file.name,
-    fileType: file.type,
-    fileSize: file.size,
-    abstract: canRead ? (await file.text()).replace(/\s+/g, " ").trim().slice(0, 900) : undefined,
-  };
-}
 
 export default function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const papers = useResearchStore((state) => state.papers);
   const sessions = useResearchStore((state) => state.sessions);
   const activeSessionId = useResearchStore((state) => state.activeSessionId);
   const createSession = useResearchStore((state) => state.createSession);
   const setActiveSession = useResearchStore((state) => state.setActiveSession);
   const deleteSession = useResearchStore((state) => state.deleteSession);
-  const sendMessage = useResearchStore((state) => state.sendMessage);
-  const addPapers = useResearchStore((state) => state.addPapers);
+  const appendChatExchange = useResearchStore((state) => state.appendChatExchange);
+  const [papers, setPapers] = useState<BackendPaper[]>([]);
   const [draft, setDraft] = useState("");
   const [sessionQuery, setSessionQuery] = useState("");
   const [detailTab, setDetailTab] = useState<"sources" | "trace">("sources");
+  const [isSending, setIsSending] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getDocuments().then(setPapers).catch(console.error);
+  }, []);
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
   const filteredSessions = useMemo(() => {
@@ -51,11 +48,30 @@ export default function ChatPage() {
   const latestAssistantMessage = [...(activeSession?.messages ?? [])].reverse().find((message) => message.role === "assistant");
   const sourcePapers = papers.filter((paper) => latestAssistantMessage?.sourcePaperIds.includes(paper.id));
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const message = draft.trim();
-    if (!message) return;
-    sendMessage(message);
+    if (!message || isSending) return;
     setDraft("");
+    setError(null);
+    setIsSending(true);
+    try {
+      const response = await sendBackendMessage(message, activeSessionId);
+      appendChatExchange(message, {
+        content: response.answer || "No answer returned.",
+        sourcePaperIds: response.sources || [],
+        reasoningSteps: response.reasoning_steps || [],
+      });
+    } catch (err: unknown) {
+      const detail = getErrorMessage(err, "Backend chat request failed.");
+      appendChatExchange(message, {
+        content: `Chat backend error: ${detail}`,
+        sourcePaperIds: [],
+        reasoningSteps: ["Backend chat request failed"],
+      });
+      setError(detail);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -67,13 +83,21 @@ export default function ChatPage() {
 
   const handleAttach = async (event: ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files || event.target.files.length === 0) return;
-    const inputs = await Promise.all(Array.from(event.target.files).map(fileToPaperInput));
-    const created = addPapers(inputs);
-    setDraft((current) => {
-      const titles = created.map((paper) => paper.title).join(", ");
-      return current ? `${current}\nAttached: ${titles}` : `Attached: ${titles}`;
-    });
-    event.target.value = "";
+    setIsUploading(true);
+    setError(null);
+    try {
+      for (const file of Array.from(event.target.files)) {
+        await uploadDocument(file);
+      }
+      const docs = await getDocuments();
+      setPapers(docs);
+      setDraft((current) => current || "Summarize the newly uploaded paper.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Upload failed."));
+    } finally {
+      setIsUploading(false);
+      event.target.value = "";
+    }
   };
 
   return (
@@ -160,7 +184,7 @@ export default function ChatPage() {
             </div>
             <div className="flex items-center gap-2 rounded-full bg-cream-dark/30 px-3 py-1 text-[10px] font-mono text-aubergine/60">
               <div className="h-1.5 w-1.5 rounded-full bg-lilac" />
-              <span>local index</span>
+              <span>backend GraphRAG</span>
             </div>
           </div>
         </div>
@@ -173,7 +197,7 @@ export default function ChatPage() {
               </div>
               <h2 className="text-2xl font-extrabold text-aubergine">Ask the local library</h2>
               <p className="mt-2 max-w-md text-sm leading-6 text-aubergine/50">
-                Questions search your uploaded paper metadata and readable snippets. Upload files first for better answers.
+                Questions go through the backend GraphRAG agent and cite uploaded papers when the graph has matching context.
               </p>
               {papers.length === 0 && (
                 <Link href="/upload" className="mt-6 flex items-center gap-2 rounded-lg bg-terracotta px-5 py-3 font-bold text-surface shadow-soft">
@@ -214,7 +238,7 @@ export default function ChatPage() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept=".pdf,.txt,.md,.csv,.json,application/pdf,text/plain,text/markdown,text/csv,application/json"
+              accept=".pdf,application/pdf"
               onChange={handleAttach}
               className="hidden"
             />
@@ -222,7 +246,8 @@ export default function ChatPage() {
               type="button"
               aria-label="Attach papers"
               onClick={() => fileInputRef.current?.click()}
-              className="mb-1 cursor-pointer p-2 text-aubergine/30 transition-colors hover:text-aubergine"
+              disabled={isUploading}
+              className="mb-1 cursor-pointer p-2 text-aubergine/30 transition-colors hover:text-aubergine disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Paperclip className="h-5 w-5" />
             </button>
@@ -238,12 +263,13 @@ export default function ChatPage() {
               type="button"
               aria-label="Send message"
               onClick={handleSend}
-              disabled={draft.trim().length === 0}
+              disabled={draft.trim().length === 0 || isSending}
               className="cursor-pointer rounded-xl bg-terracotta p-2 text-surface shadow-soft transition-transform hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:scale-100"
             >
               <Send className="h-5 w-5" />
             </button>
           </div>
+          {error && <p className="mt-3 text-xs font-medium text-terracotta">{error}</p>}
         </div>
       </section>
 
@@ -293,9 +319,11 @@ export default function ChatPage() {
             )
           ) : (
             <ol className="flex flex-col gap-3 text-sm text-aubergine/60">
-              <li className="rounded-2xl bg-surface p-4 shadow-soft">1. Normalize the user question.</li>
-              <li className="rounded-2xl bg-surface p-4 shadow-soft">2. Score uploaded papers by title, category, author, year, and readable snippets.</li>
-              <li className="rounded-2xl bg-surface p-4 shadow-soft">3. Return the strongest local sources for the answer.</li>
+              {(latestAssistantMessage?.reasoningSteps?.length ? latestAssistantMessage.reasoningSteps : ["Ask a question to see the backend retrieval plan."]).map((step, index) => (
+                <li key={`${step}-${index}`} className="rounded-2xl bg-surface p-4 shadow-soft">
+                  {index + 1}. {step}
+                </li>
+              ))}
             </ol>
           )}
         </div>

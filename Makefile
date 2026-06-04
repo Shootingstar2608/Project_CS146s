@@ -17,11 +17,11 @@ dev-frontend:
 
 # ── Testing ──
 test:
-	cd backend && python -m pytest tests/ -v
+	python -m pytest tests/ -v
 
 # ── Chạy pipeline trích xuất cho sample papers ──
 seed:
-	cd pipeline && python run_pipeline.py --input ../data/sample_papers/
+	python -c "from pipeline.embedding.ingest import ingest_directory; ingest_directory('data/sample_papers')"
 
 # ── Code quality ──
 lint:

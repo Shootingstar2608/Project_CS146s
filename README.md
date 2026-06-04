@@ -57,8 +57,8 @@ project_CS146s/
 
 Hệ thống được đóng gói 100% bằng Docker và Docker Compose.
 
-**1. Chuẩn bị biến môi trường:**
-Tạo file `.env` dựa trên file mẫu:
+**1. Chuẩn bị biến môi trường (khuyến nghị):**
+Docker Compose có giá trị mặc định để khởi động hạ tầng, nhưng bạn cần cấu hình LLM thật để ingestion/chat hoạt động đầy đủ. Tạo file `.env` dựa trên file mẫu:
 ```bash
 cp .env.example .env
 ```
@@ -73,7 +73,7 @@ docker-compose up --build -d
 - **Frontend App:** http://localhost:3000
 - **Backend API Docs (Swagger):** http://localhost:8000/docs
 - **Neo4j Browser:** http://localhost:7474 (Bolt: 7687)
-- **PostgreSQL:** Port `5432`
+- **PostgreSQL:** Port `5433` trên máy host (container dùng `5432`)
 - **Redis:** Port `6379`
 
 Để dừng ứng dụng:

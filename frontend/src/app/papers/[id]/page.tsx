@@ -4,27 +4,25 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { Download, FileText, ChevronLeft, Loader } from "lucide-react";
 import { useParams } from "next/navigation";
+import { BackendPaper, getDocuments, getErrorMessage, resolveApiUrl } from "@/lib/api";
 
 export default function PaperDetailPage() {
   const params = useParams();
   const paperId = params.id as string;
-  const [paper, setPaper] = useState<any>(null);
+  const [paper, setPaper] = useState<BackendPaper | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
     const fetchPaper = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:8000/api/v1/documents`);
-        if (!response.ok) throw new Error("Failed to fetch papers");
-        const papers = await response.json();
-        const found = papers.find((p: any) => p.id === paperId);
+        const papers = await getDocuments();
+        const found = papers.find((p) => p.id === paperId);
         if (!found) throw new Error("Paper not found");
         setPaper(found);
-      } catch (err: any) {
-        setError(err.message || "Error loading paper");
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, "Error loading paper"));
       } finally {
         setLoading(false);
       }
@@ -87,7 +85,7 @@ export default function PaperDetailPage() {
           </div>
           {paper.downloadUrl && (
             <a
-              href={`http://localhost:8000${paper.downloadUrl}`}
+              href={resolveApiUrl(paper.downloadUrl)}
               download
               className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-3 font-semibold text-surface hover:bg-terracotta/90"
             >
@@ -109,14 +107,14 @@ export default function PaperDetailPage() {
             <h2 className="mb-4 text-lg font-bold text-aubergine">Full Document</h2>
             <div className="rounded-lg bg-cream-light/40 p-4">
               <iframe
-                src={`http://localhost:8000${paper.downloadUrl}`}
+                src={resolveApiUrl(paper.downloadUrl)}
                 width="100%"
                 height="600"
                 className="rounded-lg border border-aubergine/10"
               />
             </div>
             <p className="mt-3 text-center text-xs text-aubergine/50">
-              If the PDF doesn't load, use the download button above to view it locally.
+              If the PDF does not load, use the download button above to view it locally.
             </p>
           </div>
         )}

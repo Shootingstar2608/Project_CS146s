@@ -23,6 +23,8 @@ class UploadResponse(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000, description="Câu hỏi của người dùng")
     session_id: str | None = Field(default=None, description="ID phiên chat (tự tạo nếu None)")
+    alpha: float | None = Field(default=None, ge=0.0, le=1.0, description="Vector retrieval weight override")
+    top_k: int = Field(default=5, ge=1, le=20, description="Maximum retrieval results per retriever")
 
 
 class ChatResponse(BaseModel):
@@ -32,7 +34,7 @@ class ChatResponse(BaseModel):
         default_factory=list,
         description="Các bước suy luận Agent đã thực hiện (Explainable AI)",
     )
-    graph_data: "GraphData | None" = Field(
+    graph_data: dict | None = Field(
         default=None,
         description="Dữ liệu graph liên quan để Frontend hiển thị visualization",
     )

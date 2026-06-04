@@ -69,8 +69,8 @@ async def run_agent(
 
     Args:
         user_query:     Câu hỏi đã được sanitize từ router_chat.
-        alpha_override: Tỷ lệ blend graph/vector (0.0=vector-only, 1.0=graph-only).
-                        None → dùng giá trị mặc định của retriever (0.5).
+        alpha_override: Tỷ lệ ưu tiên vector retrieval (0.0=graph-only, 1.0=vector-only).
+                        None → dùng giá trị cân bằng của retriever (0.5).
         top_k:          Số kết quả tối đa mỗi retriever trả về.
     """
     initial_state = {

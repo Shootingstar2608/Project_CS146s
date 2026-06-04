@@ -42,6 +42,7 @@ export type ChatMessage = {
   content: string;
   createdAt: string;
   sourcePaperIds: string[];
+  reasoningSteps?: string[];
 };
 
 export type ChatSession = {
@@ -89,6 +90,10 @@ type ResearchState = {
   setActiveSession: (sessionId: string) => void;
   deleteSession: (sessionId: string) => void;
   sendMessage: (message: string) => void;
+  appendChatExchange: (
+    message: string,
+    answer: { content: string; sourcePaperIds: string[]; reasoningSteps?: string[] }
+  ) => void;
   clearWorkspace: () => void;
 };
 
@@ -317,6 +322,51 @@ export const useResearchStore = create<ResearchState>()(
           content: answer.content,
           createdAt: new Date().toISOString(),
           sourcePaperIds: answer.sourcePaperIds,
+        };
+
+        set({
+          activeSessionId,
+          sessions: sessions.map((session) =>
+            session.id === activeSessionId
+              ? {
+                  ...session,
+                  title: session.messages.length === 0 ? trimmed.slice(0, 52) : session.title,
+                  updatedAt: now,
+                  messages: [...session.messages, userMessage, assistantMessage],
+                }
+              : session
+          ),
+        });
+      },
+      appendChatExchange: (message, answer) => {
+        const trimmed = message.trim();
+        if (!trimmed) return;
+
+        const state = get();
+        let activeSessionId = state.activeSessionId;
+        let sessions = state.sessions;
+
+        if (!activeSessionId || !sessions.some((session) => session.id === activeSessionId)) {
+          const session = makeInitialSession();
+          activeSessionId = session.id;
+          sessions = [session, ...sessions];
+        }
+
+        const now = new Date().toISOString();
+        const userMessage: ChatMessage = {
+          id: makeId("message"),
+          role: "user",
+          content: trimmed,
+          createdAt: now,
+          sourcePaperIds: [],
+        };
+        const assistantMessage: ChatMessage = {
+          id: makeId("message"),
+          role: "assistant",
+          content: answer.content,
+          createdAt: new Date().toISOString(),
+          sourcePaperIds: answer.sourcePaperIds,
+          reasoningSteps: answer.reasoningSteps,
         };
 
         set({

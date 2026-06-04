@@ -46,7 +46,6 @@ COPY backend ./backend
 COPY agent ./agent
 COPY pipeline ./pipeline
 COPY docs ./docs
-COPY detai_extracted.txt ./detai_extracted.txt
 
 # Set PYTHONPATH so that `from app.xxx` and `from agent.xxx` and
 # `from pipeline.xxx` all resolve correctly

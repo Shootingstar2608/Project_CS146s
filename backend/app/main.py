@@ -116,8 +116,8 @@ async def health_check_full() -> dict:
 
     # PostgreSQL
     try:
-        from app.core.database import engine
-        async with engine.connect() as conn:
+        from app.core.database import get_engine
+        async with get_engine().connect() as conn:
             await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
         result["postgres"] = "ok"
     except Exception as exc:

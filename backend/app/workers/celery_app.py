@@ -8,10 +8,14 @@ Tasks:
 
 from celery import Celery
 
+from app.config import get_settings
+
+cfg = get_settings()
+
 celery_app = Celery(
     "graphrag",
-    broker="redis://redis:6379/0",
-    backend="redis://redis:6379/0",
+    broker=cfg.redis_url,
+    backend=cfg.redis_url,
 )
 
 celery_app.conf.update(
@@ -22,10 +26,17 @@ celery_app.conf.update(
 )
 
 
-def _update_document_status_sync(paper_id: str, status: str) -> None:
+def _update_document_status_sync(
+    paper_id: str,
+    status: str,
+    result: dict | None = None,
+    error_message: str | None = None,
+) -> None:
     """Update document status using a local async DB connection from Celery."""
     import asyncio
     import logging
+
+    from datetime import datetime
 
     from sqlalchemy import update
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -42,11 +53,16 @@ def _update_document_status_sync(paper_id: str, status: str) -> None:
 
         try:
             async with session_factory() as session:
-                await session.execute(
-                    update(Document)
-                    .where(Document.id == paper_id)
-                    .values(status=status)
-                )
+                values = {"status": status, "error_message": error_message}
+                if status == "completed" and result:
+                    values.update(
+                        {
+                            "entity_count": result.get("entity_count", 0),
+                            "relation_count": result.get("relation_count", 0),
+                            "completed_at": datetime.utcnow(),
+                        }
+                    )
+                await session.execute(update(Document).where(Document.id == paper_id).values(**values))
                 await session.commit()
             logger.info("[Celery] Document %s status updated to %s", paper_id, status)
         finally:
@@ -88,7 +104,7 @@ def ingest_pdf_task(self, file_path: str, paper_id: str = None) -> dict:
         
         # Update status to completed in DB
         if paper_id:
-            _update_document_status_sync(paper_id, "completed")
+            _update_document_status_sync(paper_id, "completed", result=result)
             
         return result
     except Exception as exc:
@@ -97,6 +113,6 @@ def ingest_pdf_task(self, file_path: str, paper_id: str = None) -> dict:
         
         # Update status to failed in DB
         if paper_id:
-            _update_document_status_sync(paper_id, "failed")
+            _update_document_status_sync(paper_id, "failed", error_message=str(exc))
                 
         raise

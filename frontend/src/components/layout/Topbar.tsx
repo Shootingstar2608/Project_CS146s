@@ -1,16 +1,23 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Bell, Database, Search, Settings, User } from "lucide-react";
 import Link from "next/link";
+import { getDocuments } from "@/lib/api";
 import { useResearchStore } from "@/lib/research-store";
 
 const Topbar = () => {
   const [showStatus, setShowStatus] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const papers = useResearchStore((state) => state.papers);
+  const [paperCount, setPaperCount] = useState(0);
   const sessions = useResearchStore((state) => state.sessions);
   const clearWorkspace = useResearchStore((state) => state.clearWorkspace);
+
+  useEffect(() => {
+    getDocuments()
+      .then((docs) => setPaperCount(docs.length))
+      .catch(() => setPaperCount(0));
+  }, [showStatus]);
 
   const handleClear = () => {
     if (window.confirm("Clear local papers and chat history?")) {
@@ -68,7 +75,7 @@ const Topbar = () => {
           <div className="flex flex-col items-end">
             <span className="text-sm font-semibold text-aubergine leading-none">Local Workspace</span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-terracotta/80 mt-1">
-              Local MVP
+              GraphRAG demo
             </span>
           </div>
           <div className="h-10 w-10 overflow-hidden rounded-full bg-cream-dark shadow-soft border-2 border-surface">
@@ -84,7 +91,7 @@ const Topbar = () => {
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-xl bg-cream-dark/30 p-3">
-                <div className="text-2xl font-extrabold text-aubergine">{papers.length}</div>
+                <div className="text-2xl font-extrabold text-aubergine">{paperCount}</div>
                 <div className="text-xs font-medium text-aubergine/50">Papers</div>
               </div>
               <div className="rounded-xl bg-cream-dark/30 p-3">
@@ -99,7 +106,7 @@ const Topbar = () => {
           <div className="absolute right-0 top-12 w-72 rounded-2xl border border-aubergine/10 bg-surface p-4 shadow-deep">
             <div className="mb-3 text-sm font-bold text-aubergine">Local workspace</div>
             <p className="mb-4 text-xs leading-5 text-aubergine/50">
-              Data is stored in this browser until the backend ingestion API is ready.
+              This clears browser chat sessions only. Backend documents stay in Postgres, Neo4j, and the upload volume.
             </p>
             <button
               type="button"

@@ -74,6 +74,11 @@ async def upload_pdf(file: UploadFile = File(...)) -> UploadResponse:
                 f"Maximum allowed: {cfg.max_upload_size_mb} MB."
             ),
         )
+    if not content.startswith(b"%PDF-"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid PDF file. The uploaded file does not contain a PDF header.",
+        )
 
     # ── Persist to disk ───────────────────────────────────────────────────────
     doc_id = str(uuid.uuid4())
@@ -119,6 +124,8 @@ async def upload_pdf(file: UploadFile = File(...)) -> UploadResponse:
         )
 
     # ── Fallback: inline (sync) ingestion ─────────────────────────────────────
+    inline_status = "processing"
+    inline_message = "File received. Ingestion completed inline (Celery unavailable)."
     if not task_dispatched:
         try:
             from pipeline.embedding.ingest import ingest_pdf
@@ -134,15 +141,22 @@ async def upload_pdf(file: UploadFile = File(...)) -> UploadResponse:
             logger.info("Inline ingestion completed for: %s", file_path)
         except Exception as exc:
             logger.error("Inline ingestion failed: %s", exc)
-            # Don't raise — return processing status; user can check later
+            inline_status = "failed"
+            inline_message = f"File saved, but inline ingestion failed: {exc}"
+            async with get_session_factory()() as db:
+                doc_obj = await db.get(Document, doc_id)
+                if doc_obj:
+                    doc_obj.status = "failed"
+                    doc_obj.error_message = str(exc)
+                    await db.commit()
 
     return UploadResponse(
         document_id=doc_id,
         filename=file.filename or safe_filename,
-        status="processing",
+        status="processing" if task_dispatched else inline_status,
         message=(
             "File received and queued for ingestion via Celery."
             if task_dispatched
-            else "File received. Ingestion completed inline (Celery unavailable)."
+            else inline_message
         ),
     )

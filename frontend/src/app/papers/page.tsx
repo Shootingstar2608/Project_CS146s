@@ -16,9 +16,9 @@ import {
   paperCategories,
   PaperCategory,
   PaperStatus,
-  useResearchStore,
   ViewMode,
 } from "@/lib/research-store";
+import { BackendPaper } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const statusLabels: Record<PaperStatus, string> = {
@@ -36,7 +36,7 @@ const categoryColors: Record<PaperCategory, string> = {
 };
 
 export default function PapersPage() {
-  const [papers, setPapers] = useState<any[]>([]);
+  const [papers, setPapers] = useState<BackendPaper[]>([]);
   const [query, setQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [category, setCategory] = useState<PaperCategory | "all">("all");
@@ -218,7 +218,7 @@ export default function PapersPage() {
                       viewMode === "list" && "flex flex-col sm:flex-row"
                     )}
                   >
-                    <div className={cn("h-28", (categoryColors as any)[paper.categories?.[0]] || "bg-cream-dark", viewMode === "list" ? "sm:h-auto sm:w-28" : "w-full")} />
+                    <div className={cn("h-28", categoryColors[paper.categories?.[0] as PaperCategory] || "bg-cream-dark", viewMode === "list" ? "sm:h-auto sm:w-28" : "w-full")} />
                     <div className="flex min-w-0 flex-1 flex-col p-5">
                       <div className="mb-3 flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -245,7 +245,7 @@ export default function PapersPage() {
                         {paper.categories?.map((cat: string) => (
                           <span key={cat} className="rounded-full bg-cream-dark/40 px-3 py-1">{cat}</span>
                         ))}
-                        <span className="rounded-full bg-cream-dark/40 px-3 py-1">{(statusLabels as any)[paper.status] || "Needs review"}</span>
+                        <span className="rounded-full bg-cream-dark/40 px-3 py-1">{statusLabels[paper.status] || "Needs review"}</span>
                         {paper.year && <span className="rounded-full bg-cream-dark/40 px-3 py-1">{paper.year}</span>}
                         <span className="font-mono normal-case tracking-normal">{formatFileSize(paper.fileSize)}</span>
                       </div>

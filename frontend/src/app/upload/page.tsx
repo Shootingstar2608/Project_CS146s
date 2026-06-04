@@ -4,16 +4,8 @@ import React, { ChangeEvent, DragEvent, useMemo, useRef, useState, useEffect } f
 import Link from "next/link";
 import { CheckCircle2, FileText, FolderOpen, Library, UploadCloud, X } from "lucide-react";
 import { formatFileSize } from "@/lib/research-store";
-import { uploadDocument, getDocuments } from "@/lib/api";
+import { BackendPaper, getErrorMessage, uploadDocument, getDocuments } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-const readableTypes = new Set([
-  "text/plain",
-  "text/markdown",
-  "text/csv",
-  "application/json",
-  "application/pdf",
-]);
 
 export default function UploadPage() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -22,14 +14,15 @@ export default function UploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isIndexing, setIsIndexing] = useState(false);
   const [lastIndexedCount, setLastIndexedCount] = useState(0);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
 
   const [papersCount, setPapersCount] = useState(0);
   const [indexedCount, setIndexedCount] = useState(0);
 
   useEffect(() => {
-    getDocuments().then((docs) => {
+    getDocuments().then((docs: BackendPaper[]) => {
       setPapersCount(docs.length);
-      setIndexedCount(docs.filter((d: any) => d.status === "indexed").length);
+      setIndexedCount(docs.filter((doc) => doc.status === "indexed").length);
     }).catch(console.error);
   }, [lastIndexedCount]);
 
@@ -40,9 +33,14 @@ export default function UploadPage() {
 
   const appendFiles = (files: FileList | File[]) => {
     const incoming = Array.from(files);
+    const pdfs = incoming.filter((file) => file.type === "application/pdf" || /\.pdf$/i.test(file.name));
+    const rejected = incoming.filter((file) => !pdfs.includes(file));
+    if (rejected.length > 0) {
+      setUploadErrors(rejected.map((file) => `${file.name}: only PDF files are supported by the ingestion backend.`));
+    }
     setQueuedFiles((current) => {
       const seen = new Set(current.map((file) => `${file.name}:${file.size}`));
-      const next = incoming.filter((file) => !seen.has(`${file.name}:${file.size}`));
+      const next = pdfs.filter((file) => !seen.has(`${file.name}:${file.size}`));
       return [...current, ...next];
     });
   };
@@ -62,17 +60,24 @@ export default function UploadPage() {
     if (queuedFiles.length === 0) return;
     setIsIndexing(true);
     let successCount = 0;
+    const errors: string[] = [];
     
     for (const file of queuedFiles) {
       try {
-        await uploadDocument(file);
-        successCount++;
-      } catch (error) {
+        const response = await uploadDocument(file);
+        if (response.status === "failed") {
+          errors.push(`${file.name}: ${response.message || "ingestion failed"}`);
+        } else {
+          successCount++;
+        }
+      } catch (error: unknown) {
         console.error("Upload failed for", file.name, error);
+        errors.push(`${file.name}: ${getErrorMessage(error, "upload failed")}`);
       }
     }
     
     setLastIndexedCount(successCount);
+    setUploadErrors(errors);
     setQueuedFiles([]);
     setIsIndexing(false);
   };
@@ -103,13 +108,13 @@ export default function UploadPage() {
             </div>
             <h2 className="text-2xl font-extrabold text-aubergine">Drop research files here</h2>
             <p className="mt-2 max-w-lg text-sm leading-6 text-aubergine/50">
-              PDFs are indexed as local document records. Text, Markdown, CSV, and JSON files also contribute readable snippets to chat search.
+              PDFs are parsed, embedded, and loaded into the backend knowledge graph for GraphRAG chat.
             </p>
             <input
               ref={inputRef}
               type="file"
               multiple
-              accept=".pdf,.txt,.md,.csv,.json,application/pdf,text/plain,text/markdown,text/csv,application/json"
+              accept=".pdf,application/pdf"
               onChange={handleInputChange}
               className="hidden"
             />
@@ -174,6 +179,16 @@ export default function UploadPage() {
             ) : (
               <div className="rounded-2xl bg-cream-dark/20 p-5 text-sm text-aubergine/45">
                 Queue files to index them into the local library.
+              </div>
+            )}
+            {uploadErrors.length > 0 && (
+              <div className="rounded-2xl bg-rose/25 p-5 text-sm text-aubergine/70">
+                <div className="mb-2 font-bold text-terracotta">Upload issues</div>
+                <ul className="space-y-1">
+                  {uploadErrors.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>

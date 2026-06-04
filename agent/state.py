@@ -33,3 +33,7 @@ class AgentState(TypedDict):
 
     # Cờ: cần tìm thêm info không
     needs_more_info: bool
+
+    # Hybrid retrieval parameters
+    alpha: float
+    top_k: int

@@ -308,7 +308,7 @@ def _write_to_neo4j(
         logger.warning("[ingest] Failed to write Paper node: %s", exc)
         return {"entity_count": entity_count, "relation_count": relation_count}
 
-    # ── 7b: MERGE Author nodes + AUTHORED_BY edges ───────────────────────────
+    # ── 7b: MERGE Author nodes + AUTHORED edges ──────────────────────────────
     for author_name in (authors or []):
         try:
             Neo4jClient.execute_write(
@@ -316,7 +316,7 @@ def _write_to_neo4j(
                 MERGE (a:Author {name: $author})
                 WITH a
                 MATCH (p:Paper {paper_id: $paper_id})
-                MERGE (p)-[:AUTHORED_BY]->(a)
+                MERGE (a)-[:AUTHORED]->(p)
                 """,
                 params={"author": author_name, "paper_id": paper_id},
             )
