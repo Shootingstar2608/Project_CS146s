@@ -122671,5 +122671,39 @@
     ],
     "year": 2020,
     "chunk_index": 143
+  },
+  {
+    "chunk_id": "935e4ca93b8313f8",
+    "paper_id": "593f17a0-9fc2-4f14-a257-d7df33a03870",
+    "text": "[Demo GraphRAG Paper]\nAuthors: Tan Le\nYear: 2026\nAbstract: This paper studies GraphRAG systems for scientific research assistants. It uses a knowle",
+    "source_section": "Demo GraphRAG Paper",
+    "title": "593f17a0-9fc2-4f14-a257-d7df33a03870",
+    "authors": [],
+    "year": null,
+    "chunk_index": 0
+  },
+  {
+    "chunk_id": "652cba9fa88823d0",
+    "paper_id": "43fb9ceb-8cb3-4f51-8bcb-dd6a969ebb66",
+    "text": "[Demo GraphRAG Paper]\nAuthors: Tan Le\nYear: 2026\nKeywords: GraphRAG, vector retrieval, Neo4j, FastAPI, Celery\nAbstract: This paper studies GraphRAG systems for scientific research assistants. It combines PDF ingestio",
+    "source_section": "Demo GraphRAG Paper",
+    "title": "Demo GraphRAG Paper",
+    "authors": [
+      "Tan Le"
+    ],
+    "year": 2026,
+    "chunk_index": 0
+  },
+  {
+    "chunk_id": "b25526c96def2d83",
+    "paper_id": "43fb9ceb-8cb3-4f51-8bcb-dd6a969ebb66",
+    "text": "[1. Introduction]\nGraphRAG connects unstructured passages with graph entities so users can ask citation-aware questions o",
+    "source_section": "1. Introduction",
+    "title": "Demo GraphRAG Paper",
+    "authors": [
+      "Tan Le"
+    ],
+    "year": 2026,
+    "chunk_index": 1
   }
 ]
