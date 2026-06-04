@@ -1,211 +1,221 @@
-# Tan - Personal Context Pack (for Agentic Models)
-
-*Last updated: 2026-02-11 (Asia/Ho_Chi_Minh)*
-
-> Purpose: A cohesive context profile for any agentic model to personalize its planning, explanations, and outputs for Tan.
-
-## 1) Quick snapshot
-
-* **Preferred name:** Tan (Tan)
-* **Background:** First-year Computer Science student at **Ho Chi Minh City University of Technology (HCMUT / Bach Khoa)**.
-* **Primary direction (current):** **Software Engineer (backend/systems) with strong applied AI skills**.
-* **Secondary training track:** Competitive Programming (CP) to sharpen algorithmic thinking; a stretch goal is **OLP (Olympic Tin hoc Sinh vien Viet Nam)** next year.
-* **Timezone:** Asia/Ho_Chi_Minh.
-
-## 2) North-star goals
-
-### Short-term (next 6-12 months)
-
-* Secure a **SWE internship** (summer target).
-* Build a strong, *real* project portfolio demonstrating **backend reliability + scalability**.
-* Improve CP fundamentals; progress beyond **Div 3 A-C** toward consistent D attempts.
-
-### Mid-term (1-2 years)
-
-* Become comfortable with:
-
-  * **Backend engineering** (APIs, databases, caching, queues, reliability patterns)
-  * **Systems thinking** (tradeoffs, observability, failure modes)
-  * **Applied AI integration** (using models effectively, understanding basics under the hood)
-* Compete more seriously; possibly aim for medals/prizes (including OLP as stretch).
-
-### Long-term (3-6+ years)
-
-* Pursue a **Master's at a top global university** (Ivy-level ambition) and become a high-impact engineer.
-* Work in **Big Tech** or top-tier companies, ideally in roles involving **architecture and scalable systems**.
-
-## 3) Current skill & knowledge profile
-
-### Programming & tooling
-
-* **C++**: solid enough for algorithms/CP practice.
-* **Web stack:** can build simple full-stack apps using:
-
-  * React, Tailwind CSS
-  * TypeScript
-  * MongoDB
-* **Backend direction:** learning and using **NestJS** (modules/providers/DI), Mongoose integration, config patterns, async code behavior.
-* **Hardware:** uses a Mac; sets up VS Code for C++ and general dev.
-
-### Math & theory foundations
-
-* Strong interest in math concepts and intuition:
-
-  * Linear algebra, calculus, determinants/eigen concepts, optimization intuition
-  * Wants to understand "why" (geometry/meaning), not only formulas
-* Basic ML familiarity: **linear regression, random forest**; curiosity about model internals and matrix view of learning.
-
-### Competitive programming (CP)
-
-* Current level: **Codeforces Div 3 A-C** range.
-* Recent concrete result: **Round #943 (Div 3)** solved **A, B, C**; each had a **WA then AC** (suggests edge-case hygiene needs improvement).
-* Main bottleneck: **C -> D transition** (structure recognition, constraint reasoning, sustained focus on harder problems).
-* Motivation: CP is treated as a **training tool** for thinking and interview gates, not the entire identity.
-
-## 4) Projects & activities (practical evidence)
-
-### CivicTech platform ("Connect & Protect")
-
-* A civic reporting web platform where citizens can upload city issues (trash, infrastructure, flooding, etc.)
-* Features described:
-
-  * User reporting flow (photo + submission)
-  * Admin panel with map-based tracking
-  * Demo/storyboard scripts for presentations/pitch contests
-* Tech mentioned across iterations: React/TypeScript/Tailwind + backend stack + MongoDB.
-
-### K.C Education (tutoring center operations)
-
-* Involved in HR/finance operations.
-* Designed KPI-based salary systems and dashboards (Notion/Excel/Sheets style workflows).
-
-### Volunteer teaching initiative
-
-* Part of organizing committee recruiting volunteer teachers for 1-on-1 tutoring for children in orphanages/shelters.
-* Developed guidelines / materials:
-
-  * Child psychology understanding
-  * Teaching methods and conduct
-  * Student assessment and lesson evaluation
-
-### Other builds
-
-* Mentioned interest/experiments:
-
-  * Discord task-notifier bot integrating Notion/Google APIs
-  * AI-oriented prototypes and tool exploration (Cursor/Claude Code-like tools, "AI agent" workflows)
-
-## 5) Academic context
-
-* Heavy technical course load typical for early CS:
-
-  * Calculus, linear algebra, physics, digital systems
-* Hands-on lab experience and reports (digital logic / counters / ICs) and physics lab data reasoning.
-* Cares about strong math foundations (with some anxiety about grades early on).
-
-## 6) Motivations, temperament, and risk factors
-
-### Strengths
-
-* **High curiosity** and strong drive to understand underlying principles.
-* **Process-driven**: likes templates, checklists, automation, dashboards.
-* **Reflective**: actively analyzes failures and wants to improve.
-* Strong willingness to ship functional demos and iterate.
-
-### Common pitfalls / risk factors
-
-* Can spread attention across too many parallel tracks (CP + SWE + AI + competitions + leadership + school).
-* Tends to equate early struggles with personal ability; needs reframing toward trajectory.
-* "WA then AC" pattern suggests:
-
-  * rushing submits
-  * missing edge cases
-  * insufficient pre-submit validation
-
-### What helps Tan perform better
-
-* Clear priorities and phase-based execution (one primary identity at a time).
-* Concrete weekly goals and measurable checkpoints.
-* Brutally honest feedback when requested; minimal fluff.
-
-## 7) Learning style and content preferences
-
-### How Tan learns best
-
-* **Step-by-step** derivations and reasoning.
-* Intuition and geometric meaning (e.g., vectors, determinants, eigen concepts).
-* Concrete examples and simulations.
-* Prefer explaining *invariants/constraints* rather than only naming algorithms.
-
-### Output/format preferences
-
-* Highly structured deliverables:
-
-  * bullet lists, checklists, tables
-  * templates (Notion formulas, spreadsheet schemas)
-  * clear actionable roadmaps
-* Often appreciates bilingual (VN/EN) outputs when useful.
-* Wants code that is ready to copy/paste and practical.
-
-### Tone preference
-
-* Usually wants a **thoughtful instructor** vibe.
-* When explicitly requested, prefers **strict, straightforward, "brutal honesty"**.
-
-## 8) Agent instructions: how to work effectively with Tan
-
-### Do
-
-* Start with the **goal context** (internship + backend/systems + applied AI, CP as tool).
-* Provide **concrete next actions** (weekly plan, checklist, exact milestones).
-* Explain the "why" behind decisions; link to constraints/tradeoffs.
-* For CP: emphasize **one deep upsolve** per contest and **D attempts**, not volume.
-* For SWE: prioritize production-relevant patterns:
-
-  * caching, retries/backoff, rate limiting, idempotency, queues, observability
-
-### Don't
-
-* Don't over-praise or add motivational fluff when Tan asks for blunt feedback.
-* Don't recommend doing everything at once; force prioritization.
-* Don't assume CP skill equals SWE skill or vice versa.
-* Don't treat confusion as failure; treat it as a diagnostic.
-
-### Useful defaults (unless Tan specifies otherwise)
-
-* Language for backend examples: **TypeScript / Node / NestJS**.
-* Database examples: **MongoDB** (with notes on when other types of databases would be better).
-* Provide:
-
-  * minimal working examples
-  * edge cases
-  * testing/validation steps
-  * performance notes
-
-## 9) Current CP checkpoint (as of 2026-02-11)
-
-* Baseline: **Div 3 A-C**.
-* Latest evidence:
-
-  * Round #943: A/B/C solved; each had a WA then AC.
-* Next priority actions:
-
-  1. In every contest: **attempt D seriously** (even if fail)
-  2. Reduce WA rate via a pre-submit edge-case scan checklist
-  3. Post-contest: **upsolve exactly one hard problem** deeply (usually D)
-
-## 10) Notes on OLP blocks (high-level)
-
-* Tan is aware OLP has both **Khoi Chuyen Tin** and the higher tier **Khoi Sieu Cup**.
-* Interest: understand relative difficulty and plan a realistic trajectory.
-
-## 11) Misc. historical requests (signals of interests)
-
-* Presentation prep (e.g., Cold War summary, project pitch scripts)
-* Math/physics problem solving with step-by-step explanation
-* Document/template creation (teaching guidelines, salary KPI systems, reporting sheets)
-* Curiosity about economics concepts and first-principles thinking
-
-## 12) Summary
-
-Tan is an early-stage but unusually driven CS student building toward **backend/systems SWE** with **applied AI** competence. Tan values deep intuition and structured execution, and uses CP as a sharpening tool. The key success lever is **focus + phased progress**, turning curiosity into shipped artifacts and measurable improvement.
+# Project CS146s Agent Guide
+
+This file is for coding agents joining the repository cold. It explains what the project is, what is implemented, how the system is intended to work, and the commands/gotchas needed to make safe changes.
+
+## Project Purpose
+
+Project CS146s is a local-demo GraphRAG research assistant for academic PDFs.
+
+The app lets a user:
+
+1. Upload PDF papers through a web UI.
+2. Parse and index those papers in the backend.
+3. Store document metadata in PostgreSQL.
+4. Store paper entities and relationships in Neo4j.
+5. Store text chunk embeddings in a FAISS vector index.
+6. Ask questions in chat and receive answers grounded in graph/vector retrieval.
+7. Browse uploaded papers and visualize the knowledge graph in the frontend.
+
+The intended demo story is: upload a paper, wait for indexing, see it appear in the library/graph, then ask a question about it in chat.
+
+## Current Implementation Status
+
+The project is end-to-end functional for a local demo.
+
+Implemented:
+
+- Docker Compose stack for frontend, backend, Celery worker, Redis, PostgreSQL, Neo4j, and Nginx.
+- FastAPI backend with upload, documents, files, graph, chat, health, and full-health endpoints.
+- Celery ingestion worker with inline fallback if the queue is unavailable.
+- PDF parsing with PyMuPDF.
+- FAISS vector index with metadata sidecar files.
+- Default deterministic hashing embedder so the demo can run without downloading model weights.
+- Optional SentenceTransformer embedder if installed and configured.
+- Neo4j paper/author/entity graph writes.
+- LangGraph agent path for LLM-backed planning, retrieval, and synthesis.
+- Local retrieval fallback for chat when no Groq/Ollama LLM is configured.
+- Next.js frontend for papers, upload, chat, and graph views.
+
+Not implemented or intentionally limited:
+
+- Chat is REST POST, not WebSocket streaming.
+- The validator loop mentioned in older docs is not implemented.
+- There is no Alembic migration tree; SQLAlchemy creates current tables at startup.
+- LLM quality depends on configuring Groq or Ollama. Without an LLM, chat returns an extractive local retrieval fallback.
+- Presidio and slowapi are not part of the current runtime despite older README wording.
+
+## Architecture
+
+```text
+Frontend (Next.js)
+  pages: /papers, /papers/[id], /upload, /chat, /graph
+  talks to backend through REST API
+
+Backend (FastAPI)
+  validates uploads
+  stores document rows in PostgreSQL
+  serves documents, PDFs, graph data, and chat responses
+  dispatches ingestion to Celery
+
+Celery Worker
+  parses PDFs
+  extracts or heuristically infers metadata
+  chunks text
+  embeds chunks
+  saves FAISS index
+  writes graph records to Neo4j
+
+Data Layer
+  PostgreSQL: document metadata/status
+  Neo4j: knowledge graph nodes/edges
+  FAISS: vector index and chunk metadata
+  Redis: Celery broker/result backend
+
+Agent
+  LangGraph plan -> retrieve loop -> synthesize
+  retrieval combines graph and vector paths when LLM is configured
+  local retrieval fallback is used when the configured LLM is unavailable
+```
+
+## Important Paths
+
+- `docker-compose.yml`: full local stack.
+- `Makefile`: common commands.
+- `backend/app/main.py`: FastAPI app, lifespan startup, health endpoints, router registration.
+- `backend/app/config.py`: environment-backed settings.
+- `backend/app/api/upload.py`: PDF upload and ingestion dispatch.
+- `backend/app/api/router_chat.py`: chat endpoint.
+- `backend/app/api/router_documents.py`: uploaded paper list.
+- `backend/app/api/router_graph.py`: graph and per-paper subgraph endpoints.
+- `backend/app/api/router_files.py`: PDF download endpoint.
+- `backend/app/core/database.py`: PostgreSQL setup.
+- `backend/app/core/neo4j_client.py`: Neo4j query helpers.
+- `backend/app/core/llm_client.py`: Groq/Ollama LangChain model factory.
+- `backend/app/workers/celery_app.py`: Celery app and ingestion task.
+- `pipeline/embedding/ingest.py`: main PDF ingestion orchestrator.
+- `pipeline/embedding/embedder.py`: hashing and optional SentenceTransformer embedders.
+- `pipeline/embedding/vector_store.py`: FAISS persistence.
+- `pipeline/retrieval/vector_retriever.py`: vector search.
+- `pipeline/retrieval/graph_retriever.py`: graph retrieval.
+- `pipeline/retrieval/fusion.py`: retrieval result fusion.
+- `pipeline/extraction/`: extraction schemas, prompts, and LLM extraction.
+- `pipeline/loader/neo4j_loader.py`: Neo4j graph loading helpers.
+- `agent/graph.py`: LangGraph setup and local fallback.
+- `agent/nodes/`: planner, retriever, synthesizer nodes.
+- `frontend/AGENTS.md`: frontend-specific Next.js warning and guidance.
+- `frontend/src/lib/api.ts`: axios client and backend API helpers.
+- `frontend/src/lib/research-store.ts`: persisted client-side chat/session state.
+- `docs/architecture.md`: architecture notes.
+- `docs/graph_schema.md`: intended graph schema.
+
+## Local Run
+
+Recommended full-stack run:
+
+```bash
+docker compose up --build -d
+```
+
+Useful URLs:
+
+- Frontend: `http://localhost:3000`
+- Nginx entry: `http://localhost`
+- Backend health: `http://localhost:8000/health`
+- Full backend health: `http://localhost:8000/health/full`
+- Backend docs: `http://localhost:8000/docs`
+- Neo4j Browser: `http://localhost:7474`
+
+Stop:
+
+```bash
+docker compose down
+```
+
+Reset local DB/upload data:
+
+```bash
+make reset-db
+```
+
+## Environment
+
+Copy `.env.example` to `.env` for local configuration.
+
+Key settings:
+
+- `LLM_PROVIDER=groq` with `GROQ_API_KEY=...` for Groq.
+- `LLM_PROVIDER=ollama`, `OLLAMA_BASE_URL=...`, and `LLM_MODEL=...` for local Ollama.
+- If no LLM is configured, chat should still return a local retrieval fallback instead of failing.
+- `EMBEDDING_MODEL` defaults to `hashing` in code. Use a non-hashing model name only if `sentence-transformers` is installed and model download/runtime cost is acceptable.
+- `FAISS_INDEX_PATH` defaults to `/app/data/faiss_index` inside Docker.
+- `UPLOAD_DIR` defaults to `/app/data/uploads` inside Docker.
+
+## Main API Surface
+
+- `GET /health`: lightweight backend health.
+- `GET /health/full`: checks PostgreSQL and Neo4j.
+- `POST /api/v1/upload/`: upload PDF and start ingestion.
+- `GET /api/v1/documents`: list indexed/uploaded documents.
+- `GET /api/v1/files/{document_id}/pdf`: download original uploaded PDF.
+- `GET /api/v1/graph`: graph visualization data.
+- `GET /api/v1/graph/paper/{paper_id}`: subgraph around one paper.
+- `POST /api/v1/chat/`: ask a question.
+
+## Verification Commands
+
+Run these before claiming a backend/runtime change is safe:
+
+```bash
+python -m compileall agent backend/app pipeline -q
+python -m pytest tests/ -q
+docker compose config --quiet
+git diff --check
+```
+
+Run these before claiming a frontend change is safe:
+
+```bash
+cd frontend
+npm run lint
+npm run build
+```
+
+Run these for demo-readiness verification:
+
+```bash
+docker compose up --build -d
+curl -sS http://localhost:8000/health/full
+curl -sS http://localhost:8000/api/v1/documents
+curl -sS http://localhost:8000/api/v1/graph
+curl -sS -X POST http://localhost:8000/api/v1/chat/ \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"What does the uploaded paper discuss?","top_k":3}'
+```
+
+## Data And Git Hygiene
+
+- Treat `data/uploads/` and `data/faiss_index/` as runtime/demo data unless the task explicitly asks to seed demo data.
+- Do not casually commit generated FAISS changes; they can change after uploads.
+- Do not commit local logs or assistant-specific files such as `.claude/claudex/log`.
+- The worktree may contain user changes. Do not revert or stage unrelated files.
+- Main is protected on GitHub. Push work to a feature branch and open a PR.
+
+## Coding Guidance For Future Agents
+
+- Prefer existing patterns over new abstractions.
+- Keep backend imports compatible with Docker `PYTHONPATH=/app/backend:/app`.
+- Preserve the REST API shape expected by `frontend/src/lib/api.ts`.
+- Keep chat resilient when no external LLM key is present.
+- Keep upload validation strict: PDF extension, MIME, magic bytes, and size limit.
+- Keep ingestion asynchronous through Celery, with inline fallback only as a resilience path.
+- When touching retrieval, verify both empty-index behavior and indexed-document behavior.
+- When touching graph code, test both `/api/v1/graph` and `/api/v1/graph/paper/{paper_id}`.
+- When touching frontend, read `frontend/AGENTS.md`; this repo uses Next.js 16, which may differ from older assumptions.
+- Use concise comments only where they clarify non-obvious behavior.
+
+## Known Demo Behavior
+
+- Fresh uploads should appear as `processing` first, then `indexed` after ingestion completes.
+- If no LLM key is configured, metadata extraction falls back to simple heuristics from the PDF text.
+- If no LLM key is configured, chat returns an answer that explicitly says it used local GraphRAG retrieval fallback.
+- Graph quality improves when LLM extraction is configured; without it, the graph may contain only paper/author metadata and heuristic entities.
