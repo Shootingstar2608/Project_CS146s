@@ -6,22 +6,10 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
-# System deps required by some Python packages (libmagic, pymupdf, etc.)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        libmagic1 \
-        libgl1 \
-        libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies into a separate prefix so we can copy cleanly
-# Dùng bản CPU của PyTorch để giảm dung lượng từ 3GB+ xuống còn ~200MB
+# Install Python dependencies into a separate prefix so we can copy cleanly.
 COPY backend/requirements.txt .
 RUN pip install --upgrade pip \
- && pip install --prefix=/install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
-
-# Install sentence-transformers (for local embeddings — not in base requirements)
-RUN pip install --prefix=/install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu sentence-transformers==2.7.0
+ && pip install --prefix=/install --no-cache-dir -r requirements.txt
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Stage 2: Runtime — lean final image
@@ -29,14 +17,6 @@ RUN pip install --prefix=/install --no-cache-dir --extra-index-url https://downl
 FROM python:3.11-slim AS runtime
 
 WORKDIR /app
-
-# Runtime system libraries
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        libmagic1 \
-        libgl1 \
-        libglib2.0-0 \
-        curl \
-    && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local

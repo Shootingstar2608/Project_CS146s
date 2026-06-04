@@ -20,6 +20,7 @@ Called by:
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import List
 from enum import Enum
@@ -62,9 +63,10 @@ def ingest_pdf(
     num_pages: int = parsed["num_pages"]
     logger.info("[ingest] Parsed %d pages", num_pages)
 
-    # ── Step 2: Extract paper metadata via LLM ────────────────────────────────
-    meta = _safe_extract_metadata(full_text)
-    title = meta.get("title", paper_id)
+    # ── Step 2: Extract paper metadata via LLM or local heuristics ───────────
+    fallback_title = _fallback_title_from_path(file_path, paper_id)
+    meta = _safe_extract_metadata(full_text, fallback_title=fallback_title)
+    title = meta.get("title") or fallback_title or paper_id
     authors = meta.get("authors", [])
     year = meta.get("year")
     keywords = meta.get("keywords", [])
@@ -149,9 +151,16 @@ def ingest_pdf(
     }
 
 
-def _safe_extract_metadata(full_text: str) -> dict:
+def _fallback_title_from_path(file_path: str, paper_id: str) -> str:
+    stem = Path(file_path).stem
+    if stem.startswith(f"{paper_id}_"):
+        stem = stem[len(paper_id) + 1:]
+    return stem.replace("_", " ").replace("-", " ").strip().title()
+
+
+def _safe_extract_metadata(full_text: str, fallback_title: str = "Unknown") -> dict:
     """
-    Try LLM metadata extraction; fall back to empty dict on failure.
+    Try LLM metadata extraction; fall back to deterministic text heuristics.
     """
     try:
         from pipeline.extraction.entity_extractor import extract_paper_metadata
@@ -167,7 +176,81 @@ def _safe_extract_metadata(full_text: str) -> dict:
         }
     except Exception as exc:
         logger.warning("[ingest] Metadata extraction failed: %s", exc)
-        return {}
+        return _heuristic_extract_metadata(full_text, fallback_title)
+
+
+def _heuristic_extract_metadata(full_text: str, fallback_title: str) -> dict:
+    lines = [line.strip() for line in full_text[:5000].splitlines() if line.strip()]
+    if not lines:
+        return {
+            "title": fallback_title,
+            "authors": [],
+            "year": None,
+            "categories": ["Uncategorized"],
+            "abstract": "",
+            "keywords": [],
+        }
+
+    title = fallback_title
+    for line in lines[:8]:
+        lowered = line.casefold()
+        if lowered.startswith(("authors:", "author:", "abstract:", "keywords:")):
+            continue
+        if 3 <= len(line) <= 180:
+            title = line
+            break
+
+    authors: list[str] = []
+    for line in lines[:16]:
+        match = re.match(r"^(?:authors?|by)\s*[:\-]\s*(.+)$", line, flags=re.IGNORECASE)
+        if match:
+            authors = [
+                name.strip()
+                for name in re.split(r",|\band\b|;", match.group(1))
+                if name.strip()
+            ]
+            break
+
+    year_match = re.search(r"\b(19|20)\d{2}\b", full_text[:5000])
+    year = int(year_match.group(0)) if year_match else None
+
+    abstract = ""
+    abstract_match = re.search(
+        r"abstract\s*[:\n]\s*(.+?)(?:\n\s*(?:1\.|introduction|keywords?|background)\b|$)",
+        full_text[:8000],
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if abstract_match:
+        abstract = " ".join(abstract_match.group(1).split())[:1000]
+
+    lowered_text = full_text.casefold()
+    categories = ["Uncategorized"]
+    if any(term in lowered_text for term in ("machine learning", "neural", "embedding", "retrieval", "graphrag", "rag")):
+        categories = ["ML/AI"]
+    elif any(term in lowered_text for term in ("network", "protocol", "routing")):
+        categories = ["Networks"]
+    elif any(term in lowered_text for term in ("algorithm", "complexity", "theorem", "proof")):
+        categories = ["Theory"]
+
+    keywords = []
+    for line in lines[:24]:
+        match = re.match(r"^keywords?\s*[:\-]\s*(.+)$", line, flags=re.IGNORECASE)
+        if match:
+            keywords = [
+                word.strip()
+                for word in re.split(r",|;", match.group(1))
+                if word.strip()
+            ]
+            break
+
+    return {
+        "title": title,
+        "authors": authors,
+        "year": year,
+        "categories": categories,
+        "abstract": abstract,
+        "keywords": keywords,
+    }
 
 
 def _infer_affiliations_from_header(full_text: str, authors: list[str]) -> list[tuple[str, str]]:

@@ -6,6 +6,7 @@ Luồng: Plan → Retrieve (loop) → Synthesize → END
 
 import sys
 import os
+from typing import Any
 
 # Ensure project root is in path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -59,6 +60,135 @@ def build_agent_graph():
 agent_executor = build_agent_graph()
 
 
+def _can_use_local_fallback(exc: Exception) -> bool:
+    message = str(exc)
+    return (
+        "GROQ_API_KEY is not set" in message
+        or "Connection refused" in message
+        or "Failed to connect" in message
+    )
+
+
+def _truncate(text: str, limit: int = 420) -> str:
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit].rstrip()}..."
+
+
+def _get_paper_records(limit: int = 20) -> list[dict[str, Any]]:
+    try:
+        from backend.app.core.neo4j_client import Neo4jClient
+
+        return Neo4jClient.execute_query(
+            """
+            MATCH (p:Paper)
+            OPTIONAL MATCH (p)<-[:AUTHORED]-(a:Author)
+            RETURN p.paper_id AS paper_id,
+                   coalesce(p.name, p.title, p.paper_id) AS title,
+                   p.year AS year,
+                   p.abstract AS abstract,
+                   p.categories AS categories,
+                   collect(DISTINCT a.name) AS authors
+            LIMIT $limit
+            """,
+            {"limit": limit},
+        )
+    except Exception:
+        return []
+
+
+def _build_fallback_graph_data(chunks: list[Any], papers: list[dict[str, Any]]) -> dict:
+    nodes_by_id: dict[str, dict[str, Any]] = {}
+
+    for paper in papers:
+        paper_id = str(paper.get("paper_id") or "")
+        if not paper_id:
+            continue
+        nodes_by_id[paper_id] = {
+            "id": paper_id,
+            "label": paper.get("title") or paper_id,
+            "type": "Paper",
+            "kind": "paper",
+            "properties": {
+                "authors": paper.get("authors") or [],
+                "year": paper.get("year"),
+                "categories": paper.get("categories") or [],
+                "abstract": paper.get("abstract") or "",
+            },
+        }
+
+    for chunk in chunks:
+        paper_id = getattr(chunk, "paper_id", "")
+        if not paper_id or paper_id in nodes_by_id:
+            continue
+        nodes_by_id[paper_id] = {
+            "id": paper_id,
+            "label": getattr(chunk, "title", "") or paper_id,
+            "type": "Paper",
+            "kind": "paper",
+            "properties": {
+                "authors": getattr(chunk, "authors", []) or [],
+                "year": getattr(chunk, "year", None),
+                "source_section": getattr(chunk, "source_section", ""),
+            },
+        }
+
+    return {"nodes": list(nodes_by_id.values()), "edges": [], "links": []}
+
+
+async def _run_local_retrieval_fallback(
+    user_query: str,
+    top_k: int,
+    reason: Exception,
+) -> dict:
+    from pipeline.retrieval.vector_retriever import retrieve_chunks
+
+    chunks = retrieve_chunks(user_query, top_k=top_k, refresh=True)
+    papers = _get_paper_records(limit=max(top_k, 10))
+
+    if chunks:
+        evidence_lines = []
+        for index, chunk in enumerate(chunks, start=1):
+            title = getattr(chunk, "title", "") or getattr(chunk, "paper_id", "") or "Untitled paper"
+            section = getattr(chunk, "source_section", "") or "retrieved section"
+            evidence_lines.append(f"{index}. {title} ({section}): {_truncate(getattr(chunk, 'text', ''))}")
+
+        answer = (
+            "No LLM provider is configured, so I used the local GraphRAG retrieval fallback. "
+            "Based on the top retrieved passages, the relevant material is:\n\n"
+            + "\n".join(evidence_lines)
+        )
+    elif papers:
+        paper_lines = []
+        for index, paper in enumerate(papers[:top_k], start=1):
+            title = paper.get("title") or paper.get("paper_id") or "Untitled paper"
+            abstract = _truncate(paper.get("abstract") or "No abstract stored.", 220)
+            paper_lines.append(f"{index}. {title}: {abstract}")
+        answer = (
+            "No LLM provider is configured, and no vector chunks matched yet. "
+            "I found these papers in the knowledge graph:\n\n"
+            + "\n".join(paper_lines)
+        )
+    else:
+        answer = (
+            "No LLM provider is configured, and I could not find indexed papers or chunks yet. "
+            "Upload a PDF, wait until it is indexed, then ask again."
+        )
+
+    return {
+        "answer": answer,
+        "reasoning_steps": [
+            "Detected unavailable LLM provider; switched to local retrieval fallback.",
+            "Embedded the question with the configured local embedder.",
+            "Searched the FAISS vector index for relevant chunks.",
+            "Fetched matching paper records from Neo4j for source metadata.",
+            f"Fallback reason: {reason}",
+        ],
+        "graph_data": _build_fallback_graph_data(chunks, papers),
+    }
+
+
 async def run_agent(
     user_query: str,
     alpha_override: float | None = None,
@@ -87,7 +217,12 @@ async def run_agent(
         "top_k": top_k,
     }
 
-    result = await agent_executor.ainvoke(initial_state)
+    try:
+        result = await agent_executor.ainvoke(initial_state)
+    except Exception as exc:
+        if _can_use_local_fallback(exc):
+            return await _run_local_retrieval_fallback(user_query, top_k, exc)
+        raise
 
     return {
         "answer": result.get("final_answer", ""),

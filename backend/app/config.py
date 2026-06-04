@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 50
 
     # ── Embedding / Vector Store ──────────────────────────────────────────────
-    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_model: str = "hashing"
     faiss_index_path: str = "/app/data/faiss_index"
     chunk_size: int = 512
     chunk_overlap: int = 64

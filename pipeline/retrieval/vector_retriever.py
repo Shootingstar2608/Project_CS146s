@@ -50,23 +50,34 @@ class RetrievedChunk:
 def retrieve_chunks(
     query: str,
     top_k: int = 5,
+    refresh: bool = False,
 ) -> List[RetrievedChunk]:
     """
     Embed *query* and return the top-k most similar chunks from the FAISS index.
 
     Args:
         query:  User question or search string.
-        top_k:  Maximum number of chunks to return.
+        top_k:   Maximum number of chunks to return.
+        refresh: Load the index from disk instead of the process singleton.
+                 Useful when another process, such as Celery, just wrote it.
 
     Returns:
         List of :class:`RetrievedChunk`, sorted by cosine similarity descending.
         Returns [] if the index is empty.
     """
     from pipeline.embedding.embedder import get_embedder
-    from pipeline.embedding.vector_store import get_vector_store
+    from pipeline.embedding.vector_store import VectorStore, get_vector_store
+    from app.config import get_settings
 
     embedder = get_embedder()
-    store = get_vector_store()
+    if refresh:
+        cfg = get_settings()
+        store = VectorStore.load_or_create(
+            store_path=cfg.faiss_index_path,
+            dim=getattr(cfg, "embedding_dim", 384),
+        )
+    else:
+        store = get_vector_store()
 
     if store.size == 0:
         logger.warning("VectorStore is empty. Run the ingest pipeline first.")

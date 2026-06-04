@@ -1,18 +1,17 @@
 """
 Embedding Pipeline: Embedder
 
-Wraps SentenceTransformers as a lazy singleton.
-Swap-in path: replace the inner implementation with OpenAI embeddings
-by subclassing BaseEmbedder and overriding embed_texts().
-
-Model: all-MiniLM-L6-v2 (384-dim, ~80 MB, MIT license)
-  - Fast, runs on CPU without GPU
-  - 512-token context window aligns perfectly with our chunk_size
+Uses a deterministic hashing embedder by default so the demo can run in
+Docker without downloading large ML models. If sentence-transformers is
+installed and EMBEDDING_MODEL is set to a non-hashing model name, the local
+transformer embedder remains available.
 """
 
 from __future__ import annotations
 
 import logging
+import hashlib
+import re
 import numpy as np
 from abc import ABC, abstractmethod
 from functools import lru_cache
@@ -73,6 +72,32 @@ class SentenceTransformerEmbedder(BaseEmbedder):
         return embeddings.astype(np.float32)
 
 
+class HashingEmbedder(BaseEmbedder):
+    """Small deterministic bag-of-words embedder for local/demo vector search."""
+
+    def __init__(self, dim: int = 384) -> None:
+        self._dim = dim
+
+    def embed_texts(self, texts: List[str]) -> np.ndarray:
+        if not texts:
+            return np.empty((0, self._dim), dtype=np.float32)
+
+        rows = np.zeros((len(texts), self._dim), dtype=np.float32)
+        for row_index, text in enumerate(texts):
+            tokens = re.findall(r"[A-Za-z0-9_]+", text.casefold())
+            for token in tokens:
+                digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
+                bucket = int.from_bytes(digest[:4], "big") % self._dim
+                sign = 1.0 if digest[4] % 2 == 0 else -1.0
+                rows[row_index, bucket] += sign
+
+            norm = np.linalg.norm(rows[row_index])
+            if norm > 0:
+                rows[row_index] /= norm
+
+        return rows
+
+
 @lru_cache(maxsize=1)
 def get_embedder() -> BaseEmbedder:
     """
@@ -83,4 +108,6 @@ def get_embedder() -> BaseEmbedder:
     """
     from app.config import get_settings
     cfg = get_settings()
+    if cfg.embedding_model.lower() in {"hash", "hashing", "local-hash"}:
+        return HashingEmbedder()
     return SentenceTransformerEmbedder(model_name=cfg.embedding_model)
