@@ -1,5 +1,7 @@
 import logging
 import json
+import asyncio
+import threading
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -72,7 +74,7 @@ async def stream_chat(request: ChatRequest) -> StreamingResponse:
     alpha_override = getattr(request, "alpha", None)
     top_k = getattr(request, "top_k", 5)
 
-    async def generate():
+    def run_agent_stream(emit) -> None:
         state = {
             "messages": [],
             "user_query": safe_message,
@@ -91,16 +93,16 @@ async def stream_chat(request: ChatRequest) -> StreamingResponse:
 
         try:
             trace.append("Planning retrieval steps.")
-            yield _event("status", {"label": "Planning", "message": "Planning retrieval steps."})
+            emit("status", {"label": "Planning", "message": "Planning retrieval steps."})
             plan_update = plan_steps(state)
             state.update(plan_update)
             trace.extend([f"Plan: {step}" for step in state.get("plan", [])])
-            yield _event("trace", {"steps": trace})
+            emit("trace", {"steps": trace})
 
             while state.get("current_step", 0) < len(state.get("plan", [])):
                 step_index = int(state.get("current_step", 0))
                 step = state["plan"][step_index]
-                yield _event("status", {"label": "Traversing graph", "message": step})
+                emit("status", {"label": "Traversing graph", "message": step})
                 before_count = len(state.get("retrieved_context", []))
                 retrieve_update = retrieve_from_graph(state)
                 state.update(retrieve_update)
@@ -109,9 +111,9 @@ async def stream_chat(request: ChatRequest) -> StreamingResponse:
                 kg_count = len(latest.get("kg_results") or [])
                 vector_count = len(latest.get("vector_results") or [])
                 trace.append(f"Retrieved {kg_count} graph records and {vector_count} vector chunks for: {step}")
-                yield _event("trace", {"steps": trace})
+                emit("trace", {"steps": trace})
 
-            yield _event("status", {"label": "Synthesizing", "message": "Writing the answer from retrieved sources."})
+            emit("status", {"label": "Synthesizing", "message": "Writing the answer from retrieved sources."})
             from backend.app.core.llm_client import get_llm
 
             llm = get_llm()
@@ -123,9 +125,9 @@ async def stream_chat(request: ChatRequest) -> StreamingResponse:
                 token = getattr(chunk, "content", "") or ""
                 if token:
                     answer_parts.append(token)
-                    yield _event("token", {"content": token})
+                    emit("token", {"content": token})
 
-            yield _event("status", {"label": "Citing sources", "message": "Preparing sources and graph trace."})
+            emit("status", {"label": "Citing sources", "message": "Preparing sources and graph trace."})
             try:
                 from agent.nodes.synthesizer import synthesize_answer
 
@@ -145,8 +147,8 @@ async def stream_chat(request: ChatRequest) -> StreamingResponse:
                 sources = list(dict.fromkeys(sources))
 
             trace.append(f"Prepared {len(sources)} cited source reference{'' if len(sources) == 1 else 's'}.")
-            yield _event("sources", {"sources": sources, "graph_data": graph_data, "reasoning_steps": trace})
-            yield _event(
+            emit("sources", {"sources": sources, "graph_data": graph_data, "reasoning_steps": trace})
+            emit(
                 "final",
                 {
                     "answer": "".join(answer_parts),
@@ -157,6 +159,28 @@ async def stream_chat(request: ChatRequest) -> StreamingResponse:
             )
         except Exception as exc:
             logger.exception("Streaming chat failed")
-            yield _event("error", {"message": str(exc), "reasoning_steps": trace})
+            emit("error", {"message": str(exc), "reasoning_steps": trace})
+
+    async def generate():
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        def emit(event_type: str, payload: dict[str, Any]) -> None:
+            loop.call_soon_threadsafe(queue.put_nowait, _event(event_type, payload))
+
+        def worker() -> None:
+            try:
+                run_agent_stream(emit)
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield item
 
     return StreamingResponse(generate(), media_type="application/x-ndjson")
