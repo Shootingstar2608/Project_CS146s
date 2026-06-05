@@ -1,48 +1,33 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Download, FileText, ChevronLeft, Loader } from "lucide-react";
+import { Download, FileText, ChevronLeft } from "lucide-react";
 import { useParams } from "next/navigation";
-import { BackendPaper, getDocuments, getErrorMessage, resolveApiUrl } from "@/lib/api";
+import { getErrorMessage, resolveApiUrl } from "@/lib/api";
+import { useDocuments } from "@/lib/queries";
+import Spinner from "@/components/ui/Spinner";
 
 export default function PaperDetailPage() {
   const params = useParams();
   const paperId = params.id as string;
-  const [paper, setPaper] = useState<BackendPaper | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: papers = [], isPending, isError, error } = useDocuments();
+  const paper = papers.find((p) => p.id === paperId) ?? null;
 
-  useEffect(() => {
-    const fetchPaper = async () => {
-      try {
-        setLoading(true);
-        const papers = await getDocuments();
-        const found = papers.find((p) => p.id === paperId);
-        if (!found) throw new Error("Paper not found");
-        setPaper(found);
-      } catch (err: unknown) {
-        setError(getErrorMessage(err, "Error loading paper"));
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchPaper();
-  }, [paperId]);
-
-  if (loading) {
+  if (isPending) {
     return (
       <div className="flex min-h-[600px] items-center justify-center">
-        <Loader className="h-8 w-8 animate-spin text-terracotta" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }
 
-  if (error || !paper) {
+  if (isError || !paper) {
     return (
       <div className="flex min-h-[600px] flex-col items-center justify-center gap-4">
         <FileText className="h-16 w-16 text-aubergine/20" />
-        <p className="text-lg font-semibold text-aubergine">{error || "Paper not found"}</p>
+        <p className="text-lg font-semibold text-aubergine">
+          {isError ? getErrorMessage(error, "Error loading paper") : "Paper not found"}
+        </p>
         <Link href="/papers" className="text-terracotta hover:underline">
           ← Back to papers
         </Link>

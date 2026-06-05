@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
+from threading import Lock
 from typing import List, Tuple
 
 import numpy as np
@@ -27,6 +27,11 @@ import numpy as np
 from pipeline.embedding.chunker import Chunk
 
 logger = logging.getLogger(__name__)
+
+# Guards every mutation of the shared VectorStore singleton (add/delete + save).
+# IndexFlatIP rebuilds and the parallel metadata list are not concurrency-safe,
+# so ingestion and deletion must serialise through this lock.
+vector_store_lock = Lock()
 
 _INDEX_FILE = "chunks.index"
 _META_FILE = "chunks.meta"
@@ -122,6 +127,61 @@ class VectorStore:
             json.dump(self._metadata, f, ensure_ascii=False, indent=2)
 
         logger.info("FAISS index saved (%d vectors) to %s", self._index.ntotal, path)
+
+    def delete_by_paper_id(self, paper_id: str) -> int:
+        """
+        Delete all vectors whose chunk metadata matches ``paper_id``.
+
+        ``IndexFlatIP`` does not support safe IDSelector-based removal against a
+        parallel metadata list (its ``remove_ids`` would renumber FAISS rows but
+        leave ``self._metadata`` misaligned). Instead we reconstruct every vector,
+        drop the target paper's rows, and rebuild the index from scratch so FAISS
+        row order and the metadata list stay aligned.
+
+        Callers must hold :data:`vector_store_lock` and call :meth:`save`
+        afterwards to persist the change.
+
+        Returns:
+            Number of chunk vectors removed (0 if the paper had no chunks).
+        """
+        import faiss
+
+        target = str(paper_id)
+        total = int(self._index.ntotal)
+        if total == 0:
+            return 0
+
+        if len(self._metadata) != total:
+            raise ValueError(
+                f"VectorStore metadata length ({len(self._metadata)}) "
+                f"differs from FAISS ntotal ({total}) — index is corrupt."
+            )
+
+        remove_mask = [str(m.get("paper_id", "")) == target for m in self._metadata]
+        deleted_count = int(sum(remove_mask))
+        if deleted_count == 0:
+            return 0
+
+        # Reconstruct all raw vectors, then keep only the rows to retain.
+        all_vectors = np.empty((total, self._dim), dtype=np.float32)
+        self._index.reconstruct_n(0, total, all_vectors)
+        keep_mask = np.array([not r for r in remove_mask], dtype=bool)
+        kept_vectors = np.ascontiguousarray(all_vectors[keep_mask].astype(np.float32))
+        kept_metadata = [m for m, r in zip(self._metadata, remove_mask) if not r]
+
+        new_index = faiss.IndexFlatIP(self._dim)
+        if kept_vectors.shape[0] > 0:
+            new_index.add(kept_vectors)
+
+        self._index = new_index
+        self._metadata = kept_metadata
+        logger.info(
+            "FAISS: removed %d chunks for paper_id=%s; %d vectors remain.",
+            deleted_count,
+            target,
+            self._index.ntotal,
+        )
+        return deleted_count
 
     # ── Read operations ───────────────────────────────────────────────────────
 

@@ -45,7 +45,6 @@ def ingest_pdf(
         Summary dict: {paper_id, title, num_chunks, num_pages, ...}
     """
     from pipeline.ingestion.pdf_parser import parse_pdf, split_into_sections
-    from pipeline.extraction.entity_extractor import extract_paper_metadata
     from pipeline.embedding.chunker import chunk_section
     from pipeline.embedding.embedder import get_embedder
     from pipeline.embedding.vector_store import get_vector_store
@@ -115,12 +114,14 @@ def ingest_pdf(
     logger.info("[ingest] Embeddings computed: shape=%s", embeddings.shape)
 
     # ── Step 6: Add to FAISS index ────────────────────────────────────────────
-    store = get_vector_store()
-    store.add(all_chunks, embeddings)
+    from pipeline.embedding.vector_store import vector_store_lock
 
-    if save_index:
-        store.save()
-        logger.info("[ingest] FAISS index saved.")
+    store = get_vector_store()
+    with vector_store_lock:
+        store.add(all_chunks, embeddings)
+        if save_index:
+            store.save()
+            logger.info("[ingest] FAISS index saved.")
 
     # ── Step 7: Write Paper + entities/relations to Neo4j ────────────────────
     kg_result = _write_to_neo4j(

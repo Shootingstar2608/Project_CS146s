@@ -1,10 +1,12 @@
 "use client";
 
-import React, { ChangeEvent, DragEvent, useMemo, useRef, useState, useEffect } from "react";
+import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, FileText, FolderOpen, Library, UploadCloud, X } from "lucide-react";
 import { formatFileSize } from "@/lib/research-store";
-import { BackendPaper, getErrorMessage, uploadDocument, getDocuments } from "@/lib/api";
+import { getErrorMessage, uploadDocument } from "@/lib/api";
+import { queryKeys, useDocuments } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 export default function UploadPage() {
@@ -16,15 +18,10 @@ export default function UploadPage() {
   const [lastIndexedCount, setLastIndexedCount] = useState(0);
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
 
-  const [papersCount, setPapersCount] = useState(0);
-  const [indexedCount, setIndexedCount] = useState(0);
-
-  useEffect(() => {
-    getDocuments().then((docs: BackendPaper[]) => {
-      setPapersCount(docs.length);
-      setIndexedCount(docs.filter((doc) => doc.status === "indexed").length);
-    }).catch(console.error);
-  }, [lastIndexedCount]);
+  const queryClient = useQueryClient();
+  const { data: documents = [] } = useDocuments();
+  const papersCount = documents.length;
+  const indexedCount = documents.filter((doc) => doc.status === "indexed").length;
 
   const totalQueuedSize = useMemo(
     () => queuedFiles.reduce((total, file) => total + file.size, 0),
@@ -80,6 +77,11 @@ export default function UploadPage() {
     setUploadErrors(errors);
     setQueuedFiles([]);
     setIsIndexing(false);
+    if (successCount > 0) {
+      // Refresh the library counts and any open graph/library views.
+      queryClient.invalidateQueries({ queryKey: queryKeys.documents });
+      queryClient.invalidateQueries({ queryKey: ["graph"] });
+    }
   };
 
   return (

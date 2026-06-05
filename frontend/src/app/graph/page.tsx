@@ -1,10 +1,13 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { FileText, Filter, Network, Search, Upload } from "lucide-react";
 import { GraphNode } from "@/lib/research-store";
+import { useDocuments, useGraph } from "@/lib/queries";
+import ErrorState from "@/components/ui/ErrorState";
+import Spinner from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils";
 
 type PositionedNode = GraphNode & {
@@ -146,11 +149,14 @@ function seededJitter(value: string, spread: number) {
 }
 
 // Deterministic grouped layout so the graph stays readable across renders.
-function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]): PositionedNode[] {
+function layoutGraph(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  canvasW = 720,
+  canvasH = 520
+): PositionedNode[] {
   if (nodes.length === 0) return [];
 
-  const canvasW = 720;
-  const canvasH = 520;
   const padding = 60;
   const centerX = canvasW / 2;
   const centerY = canvasH / 2;
@@ -224,33 +230,47 @@ function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]): PositionedNode[] {
   }));
 }
 
-function positionNodes(nodes: GraphNode[], edges: GraphEdge[] = []): PositionedNode[] {
-  return layoutGraph(nodes, edges);
+function positionNodes(
+  nodes: GraphNode[],
+  edges: GraphEdge[] = [],
+  width = 720,
+  height = 520
+): PositionedNode[] {
+  return layoutGraph(nodes, edges, width, height);
 }
 
 export default function GraphPage() {
-  type PaperSummary = {
-    id: string;
-    title?: string;
-    fileName?: string;
-    abstract?: string;
-  };
-
-  const [papers, setPapers] = useState<PaperSummary[]>([]);
-  const [viewPaperId, setViewPaperId] = useState<string | "global">("global");
+  const [viewPaperId, setViewPaperId] = useState<string>("global");
   const [query, setQuery] = useState("");
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
   const [hoveredNodeId, setHoveredNodeId] = useState<string>();
-  const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphEdge[] }>({ nodes: [], links: [] });
 
-  React.useEffect(() => {
-    import("@/lib/api").then(({ getDocuments, getGraphData }) => {
-      getDocuments().then(setPapers).catch(console.error);
-      // Load global graph by default
-      getGraphData().then(setGraphData).catch(console.error);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 720, height: 520 });
 
-      // If user picks a paper later, we'll call getGraphSubgraph
+  const { data: papers = [], isPending: papersPending } = useDocuments();
+  const graphQuery = useGraph(viewPaperId);
+  const graphQueryData = graphQuery.data;
+  const graphData = useMemo(
+    () =>
+      (graphQueryData ?? { nodes: [], links: [] }) as {
+        nodes: GraphNode[];
+        links: GraphEdge[];
+      },
+    [graphQueryData]
+  );
+
+  // Size the canvas to its container so it fills the available width responsively
+  // instead of a fixed 720px box with horizontal scroll.
+  useEffect(() => {
+    const element = canvasContainerRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 720;
+      setDimensions({ width: Math.max(320, Math.floor(width)), height: 520 });
     });
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
 
   const visibleGraph = useMemo(() => {
@@ -277,7 +297,10 @@ export default function GraphPage() {
     return graphData;
   }, [graphData, query]);
 
-  const positionedNodes = useMemo(() => positionNodes(visibleGraph.nodes, visibleGraph.links), [visibleGraph.nodes, visibleGraph.links]);
+  const positionedNodes = useMemo(
+    () => positionNodes(visibleGraph.nodes, visibleGraph.links, dimensions.width, dimensions.height),
+    [visibleGraph.nodes, visibleGraph.links, dimensions.width, dimensions.height]
+  );
   const nodeById = useMemo(() => new Map(positionedNodes.map((node) => [node.id, node])), [positionedNodes]);
   const selectedNode = positionedNodes.find((node) => node.id === selectedNodeId);
   const activeNodeId = hoveredNodeId ?? selectedNodeId;
@@ -360,7 +383,11 @@ export default function GraphPage() {
         </div>
       </div>
 
-      {papers.length === 0 ? (
+      {papersPending ? (
+        <div className="flex min-h-[520px] items-center justify-center rounded-[28px] bg-surface/50">
+          <Spinner className="h-8 w-8" />
+        </div>
+      ) : papers.length === 0 ? (
         <div className="flex min-h-[520px] flex-col items-center justify-center rounded-[28px] border border-dashed border-aubergine/15 bg-surface/50 p-8 text-center">
           <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-cream-dark/40 text-terracotta">
             <Network className="h-10 w-10" />
@@ -393,24 +420,12 @@ export default function GraphPage() {
                 <label className="text-xs text-aubergine/45">View:</label>
                 <select
                   value={viewPaperId}
-                  onChange={async (e) => {
-                    const val = e.target.value;
-                    setViewPaperId(val as string);
-                    const api = await import('@/lib/api');
-                    try {
-                      if (val === 'global') {
-                        const g = await api.getGraphData();
-                        setGraphData(g);
-                      } else {
-                        const g = await api.getGraphSubgraph(val);
-                        setGraphData(g);
-                      }
-                      setSelectedNodeId(undefined);
-                    } catch (err) {
-                      console.error(err);
-                    }
+                  onChange={(e) => {
+                    setViewPaperId(e.target.value);
+                    setSelectedNodeId(undefined);
                   }}
                   className="rounded-md bg-surface px-2 py-1 text-sm"
+                  aria-label="Choose graph view"
                 >
                   <option value="global">Global graph</option>
                   {papers.map((p) => (
@@ -431,15 +446,23 @@ export default function GraphPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto bg-cream-light/40">
-              <div className="h-[520px] min-w-[720px]">
+            <div ref={canvasContainerRef} className="relative bg-cream-light/40">
+              <div className="h-[520px] w-full">
+                {graphQuery.isError ? (
+                  <div className="flex h-full items-center justify-center p-6">
+                    <ErrorState
+                      title="Couldn't load the graph"
+                      onRetry={() => graphQuery.refetch()}
+                    />
+                  </div>
+                ) : (
                 <ForceGraph2D
                   graphData={forceGraphData}
                   nodeId="id"
                   nodeLabel={(node) => node.label}
                   linkLabel={(link) => formatEdgeLabel(link.label)}
-                  width={720}
-                  height={520}
+                  width={dimensions.width}
+                  height={dimensions.height}
                   backgroundColor="#FFF8F1"
                   nodeCanvasObject={renderNode}
                   nodePointerAreaPaint={(node, color, ctx) => {
@@ -464,6 +487,12 @@ export default function GraphPage() {
                   onNodeClick={(node) => setSelectedNodeId(node.id)}
                   onBackgroundClick={() => setSelectedNodeId(undefined)}
                 />
+                )}
+                {graphQuery.isPending && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-cream-light/40">
+                    <Spinner className="h-7 w-7" />
+                  </div>
+                )}
               </div>
             </div>
           </section>

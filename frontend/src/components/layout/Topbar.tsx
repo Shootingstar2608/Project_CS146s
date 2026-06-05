@@ -1,23 +1,18 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useState } from "react";
 import { Bell, Database, Search, Settings, User } from "lucide-react";
 import Link from "next/link";
-import { getDocuments } from "@/lib/api";
+import { useDocuments } from "@/lib/queries";
 import { useResearchStore } from "@/lib/research-store";
 
 const Topbar = () => {
   const [showStatus, setShowStatus] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [paperCount, setPaperCount] = useState(0);
+  const { data: documents = [] } = useDocuments();
+  const paperCount = documents.length;
   const sessions = useResearchStore((state) => state.sessions);
   const clearWorkspace = useResearchStore((state) => state.clearWorkspace);
-
-  useEffect(() => {
-    getDocuments()
-      .then((docs) => setPaperCount(docs.length))
-      .catch(() => setPaperCount(0));
-  }, [showStatus]);
 
   const handleClear = () => {
     if (window.confirm("Clear local papers and chat history?")) {

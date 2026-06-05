@@ -60,6 +60,13 @@ export const uploadDocument = async (file: File) => {
   return response.data;
 };
 
+export const deleteDocument = async (id: string) => {
+  // Backend cascades the delete across Postgres, Neo4j, FAISS, and disk.
+  // Returns 204 (clean) or 200 with a summary; we don't need the body.
+  const response = await api.delete(`/documents/${id}`);
+  return response.data;
+};
+
 export const sendMessage = async (message: string, sessionId?: string, topK = 5) => {
   const response = await api.post("/chat/", { message, session_id: sessionId, top_k: topK });
   return response.data;

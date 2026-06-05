@@ -1,6 +1,11 @@
-# Architecture Document (Bản Nháp)
+# Architecture Document
 
 ## Autonomous Graph-RAG Agent — Kiến Trúc Hệ Thống
+
+> **Trạng thái:** Một số chi tiết trong bản nháp gốc đã được cập nhật cho khớp code hiện tại.
+> Khác biệt chính so với bản nháp: Chat dùng **REST POST** (chưa có WebSocket/streaming),
+> Retriever là **hybrid** (Cypher trên Neo4j **+** vector search trên FAISS rồi fuse bằng RRF),
+> và node **Validator** trong sơ đồ **chưa được hiện thực**. Xem `ONBOARDING.md` và `docs/graph_schema.md`.
 
 ### 1. Tổng Quan
 
@@ -28,7 +33,7 @@ Hệ thống gồm 4 tầng chính, giao tiếp qua REST API và message queue:
        ▼                          ▼
 ┌──────────────────────────────────────────────────────────┐
 │                    DATA LAYER                            │
-│   Neo4j (Knowledge Graph)  │  PostgreSQL (Metadata)     │
+│  Neo4j (KG)  │  PostgreSQL (Metadata)  │  FAISS (Vectors) │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -51,15 +56,17 @@ User upload PDF
 #### Luồng 2: Chat → Agent suy luận đa bước
 ```
 User gửi câu hỏi
-  → FastAPI nhận qua WebSocket
-  → Security: check Prompt Injection + mask PII
+  → FastAPI nhận qua REST POST /api/v1/chat/   (chưa dùng WebSocket)
+  → Security: check Prompt Injection + mask PII (regex tự viết)
   → LangGraph Agent:
       1. Planner: phân tích câu hỏi → lập kế hoạch N bước
-      2. Retriever: LLM sinh Cypher → query Neo4j
-      3. Synthesizer: tổng hợp context → sinh câu trả lời
-      4. Validator: kiểm tra chất lượng → loop lại nếu thiếu
-  → Streaming response về Frontend
-  → Frontend hiển thị: text + Graph Visualization (highlight nodes)
+      2. Retriever (hybrid): LLM sinh Cypher → Neo4j  +  vector search → FAISS
+                              rồi fuse bằng Reciprocal Rank Fusion (alpha-weighted)
+      3. Synthesizer: tổng hợp context → sinh câu trả lời (markdown)
+      (Validator: dự kiến kiểm tra chất lượng — CHƯA hiện thực)
+  → Response JSON về Frontend (chưa streaming)
+  → Frontend hiển thị: text + Graph Visualization
+  → Nếu chưa cấu hình LLM → fallback trả lời bằng vector retrieval local
 ```
 
 ### 3. Tech Stack
@@ -68,13 +75,15 @@ User gửi câu hỏi
 |-----------|-----------|-------|
 | Graph DB | Neo4j Community | Tiêu chuẩn cho Knowledge Graph |
 | Relational DB | PostgreSQL | Metadata, chat history |
+| Vector Store | FAISS (IndexFlatIP) | Semantic search, fuse với KG bằng RRF |
+| Embedder | Hashing (mặc định) / sentence-transformers | Chạy demo không cần tải model |
 | Backend | FastAPI | Async native, auto OpenAPI docs |
 | Agent | LangGraph | Cyclic graph cho multi-step reasoning |
 | LLM | Groq (Llama 3.3 70B) | Free tier, nhanh |
 | PDF Parse | PyMuPDF | Xử lý 2 cột, bảng, miễn phí |
 | Task Queue | Celery + Redis | Background processing |
-| Frontend | Next.js + react-force-graph | SSR + Graph visualization |
-| Proxy | Nginx | Reverse proxy, WebSocket support |
+| Frontend | Next.js 16 + React Query + react-force-graph | SSR + caching + Graph visualization |
+| Proxy | Nginx | Reverse proxy |
 
 ### 4. Graph Schema
 

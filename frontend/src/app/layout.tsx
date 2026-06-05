@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import MainLayout from "@/components/layout/MainLayout";
@@ -15,8 +15,19 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MLIoT Knowledge Agent",
-  description: "Graph-RAG research assistant for the MLIoT lab",
+  title: {
+    default: "MLIoT Knowledge Agent",
+    template: "%s · MLIoT Knowledge Agent",
+  },
+  description:
+    "Hybrid GraphRAG research assistant — query academic papers across a Neo4j knowledge graph and a vector index.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#3A2E3D",
+  colorScheme: "light",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({

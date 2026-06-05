@@ -1,7 +1,8 @@
 "use client";
 
-import React, { ChangeEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronRight,
   Maximize2,
@@ -14,19 +15,24 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { BackendPaper, getDocuments, getErrorMessage, sendMessage as sendBackendMessage, uploadDocument } from "@/lib/api";
+import { getErrorMessage, sendMessage as sendBackendMessage, uploadDocument } from "@/lib/api";
+import { queryKeys, useDocuments } from "@/lib/queries";
 import { useResearchStore } from "@/lib/research-store";
+import Markdown from "@/components/ui/Markdown";
 import { cn } from "@/lib/utils";
 
 export default function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
   const sessions = useResearchStore((state) => state.sessions);
   const activeSessionId = useResearchStore((state) => state.activeSessionId);
   const createSession = useResearchStore((state) => state.createSession);
   const setActiveSession = useResearchStore((state) => state.setActiveSession);
   const deleteSession = useResearchStore((state) => state.deleteSession);
-  const appendChatExchange = useResearchStore((state) => state.appendChatExchange);
-  const [papers, setPapers] = useState<BackendPaper[]>([]);
+  const appendUserMessage = useResearchStore((state) => state.appendUserMessage);
+  const appendAssistantMessage = useResearchStore((state) => state.appendAssistantMessage);
+  const { data: papers = [] } = useDocuments();
   const [draft, setDraft] = useState("");
   const [sessionQuery, setSessionQuery] = useState("");
   const [detailTab, setDetailTab] = useState<"sources" | "trace">("sources");
@@ -34,11 +40,12 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getDocuments().then(setPapers).catch(console.error);
-  }, []);
-
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
+
+  // Keep the latest message (and the typing indicator) in view.
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [activeSession?.messages.length, isSending]);
   const filteredSessions = useMemo(() => {
     const normalized = sessionQuery.trim().toLowerCase();
     if (!normalized) return sessions;
@@ -54,16 +61,18 @@ export default function ChatPage() {
     setDraft("");
     setError(null);
     setIsSending(true);
+    // Show the user's message immediately (optimistic), then await the answer.
+    appendUserMessage(message);
     try {
       const response = await sendBackendMessage(message, activeSessionId);
-      appendChatExchange(message, {
+      appendAssistantMessage({
         content: response.answer || "No answer returned.",
         sourcePaperIds: response.sources || [],
         reasoningSteps: response.reasoning_steps || [],
       });
     } catch (err: unknown) {
       const detail = getErrorMessage(err, "Backend chat request failed.");
-      appendChatExchange(message, {
+      appendAssistantMessage({
         content: `Chat backend error: ${detail}`,
         sourcePaperIds: [],
         reasoningSteps: ["Backend chat request failed"],
@@ -89,8 +98,8 @@ export default function ChatPage() {
       for (const file of Array.from(event.target.files)) {
         await uploadDocument(file);
       }
-      const docs = await getDocuments();
-      setPapers(docs);
+      queryClient.invalidateQueries({ queryKey: queryKeys.documents });
+      queryClient.invalidateQueries({ queryKey: ["graph"] });
       setDraft((current) => current || "Summarize the newly uploaded paper.");
     } catch (err: unknown) {
       setError(getErrorMessage(err, "Upload failed."));
@@ -212,22 +221,40 @@ export default function ChatPage() {
                 <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
                   <div
                     className={cn(
-                      "max-w-[90%] whitespace-pre-line rounded-[20px] p-4 text-sm leading-relaxed sm:max-w-[76%]",
+                      "max-w-[90%] rounded-[20px] p-4 text-sm leading-relaxed sm:max-w-[76%]",
                       message.role === "user"
-                        ? "bg-terracotta text-surface shadow-soft"
+                        ? "whitespace-pre-line bg-terracotta text-surface shadow-soft"
                         : "border border-aubergine/5 bg-cream-dark/10 text-aubergine"
                     )}
                   >
-                    {message.role === "assistant" && (
-                      <div className="mb-4 flex items-center gap-2 border-b border-aubergine/5 pb-2 text-[10px] font-mono text-aubergine/40">
-                        <ChevronRight className="h-3 w-3" />
-                        <span>Local retrieval complete</span>
-                      </div>
+                    {message.role === "assistant" ? (
+                      <>
+                        <div className="mb-3 flex items-center gap-2 border-b border-aubergine/5 pb-2 text-[10px] font-mono text-aubergine/40">
+                          <ChevronRight className="h-3 w-3" />
+                          <span>GraphRAG answer</span>
+                        </div>
+                        <Markdown>{message.content}</Markdown>
+                      </>
+                    ) : (
+                      message.content
                     )}
-                    {message.content}
                   </div>
                 </div>
               ))}
+
+              {isSending && (
+                <div className="flex justify-start">
+                  <div className="flex items-center gap-3 rounded-[20px] border border-aubergine/5 bg-cream-dark/10 px-4 py-3 text-sm text-aubergine/60">
+                    <span className="flex gap-1" aria-hidden>
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-terracotta/60 [animation-delay:-0.2s] motion-reduce:animate-none" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-terracotta/60 [animation-delay:-0.1s] motion-reduce:animate-none" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-terracotta/60 motion-reduce:animate-none" />
+                    </span>
+                    <span>Searching the knowledge graph…</span>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
             </div>
           )}
         </div>

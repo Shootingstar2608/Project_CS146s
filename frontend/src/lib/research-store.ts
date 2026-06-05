@@ -94,6 +94,12 @@ type ResearchState = {
     message: string,
     answer: { content: string; sourcePaperIds: string[]; reasoningSteps?: string[] }
   ) => void;
+  appendUserMessage: (message: string) => void;
+  appendAssistantMessage: (answer: {
+    content: string;
+    sourcePaperIds: string[];
+    reasoningSteps?: string[];
+  }) => void;
   clearWorkspace: () => void;
 };
 
@@ -379,6 +385,66 @@ export const useResearchStore = create<ResearchState>()(
                   updatedAt: now,
                   messages: [...session.messages, userMessage, assistantMessage],
                 }
+              : session
+          ),
+        });
+      },
+      appendUserMessage: (message) => {
+        const trimmed = message.trim();
+        if (!trimmed) return;
+
+        const state = get();
+        let activeSessionId = state.activeSessionId;
+        let sessions = state.sessions;
+
+        if (!activeSessionId || !sessions.some((session) => session.id === activeSessionId)) {
+          const session = makeInitialSession();
+          activeSessionId = session.id;
+          sessions = [session, ...sessions];
+        }
+
+        const now = new Date().toISOString();
+        const userMessage: ChatMessage = {
+          id: makeId("message"),
+          role: "user",
+          content: trimmed,
+          createdAt: now,
+          sourcePaperIds: [],
+        };
+
+        set({
+          activeSessionId,
+          sessions: sessions.map((session) =>
+            session.id === activeSessionId
+              ? {
+                  ...session,
+                  title: session.messages.length === 0 ? trimmed.slice(0, 52) : session.title,
+                  updatedAt: now,
+                  messages: [...session.messages, userMessage],
+                }
+              : session
+          ),
+        });
+      },
+      appendAssistantMessage: (answer) => {
+        const state = get();
+        const activeSessionId = state.activeSessionId;
+        if (!activeSessionId) return;
+
+        const now = new Date().toISOString();
+        const assistantMessage: ChatMessage = {
+          id: makeId("message"),
+          role: "assistant",
+          content: answer.content,
+          createdAt: now,
+          sourcePaperIds: answer.sourcePaperIds,
+          reasoningSteps: answer.reasoningSteps,
+        };
+
+        set({
+          sessions: state.sessions.map((session) =>
+            session.id === activeSessionId
+              ? { ...session, updatedAt: now, messages: [...session.messages, assistantMessage] }
               : session
           ),
         });

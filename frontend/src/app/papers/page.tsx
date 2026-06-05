@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   FileText,
@@ -18,7 +18,9 @@ import {
   PaperStatus,
   ViewMode,
 } from "@/lib/research-store";
-import { BackendPaper } from "@/lib/api";
+import { useDeleteDocument, useDocuments } from "@/lib/queries";
+import ErrorState from "@/components/ui/ErrorState";
+import Skeleton from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 
 const statusLabels: Record<PaperStatus, string> = {
@@ -36,22 +38,21 @@ const categoryColors: Record<PaperCategory, string> = {
 };
 
 export default function PapersPage() {
-  const [papers, setPapers] = useState<BackendPaper[]>([]);
+  const { data: papers = [], isPending, isError, refetch } = useDocuments();
+  const deleteMutation = useDeleteDocument();
   const [query, setQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [category, setCategory] = useState<PaperCategory | "all">("all");
   const [status, setStatus] = useState<PaperStatus | "all">("all");
 
-  React.useEffect(() => {
-    import("@/lib/api").then(({ getDocuments }) => {
-      getDocuments().then(setPapers).catch(console.error);
-    });
-  }, []);
-
-  const removePaper = async (id: string) => {
-    // Để đơn giản MVP API, hiện chưa có backend delete endpoint.
-    // Chỉ ẩn đi trên UI.
-    setPapers(papers.filter(p => p.id !== id));
+  const removePaper = (id: string, title: string) => {
+    if (
+      window.confirm(
+        `Delete "${title}"? This removes the paper from the graph, vector index, and storage. This cannot be undone.`
+      )
+    ) {
+      deleteMutation.mutate(id);
+    }
   };
 
   const filteredPapers = useMemo(() => {
@@ -187,7 +188,18 @@ export default function PapersPage() {
         </aside>
 
         <div className="min-w-0 flex-1">
-          {papers.length === 0 ? (
+          {isPending ? (
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <Skeleton key={index} className="h-[260px] rounded-[20px]" />
+              ))}
+            </div>
+          ) : isError ? (
+            <ErrorState
+              title="Couldn't load your library"
+              onRetry={() => refetch()}
+            />
+          ) : papers.length === 0 ? (
             <div className="flex min-h-[480px] flex-col items-center justify-center rounded-[28px] border border-dashed border-aubergine/15 bg-surface/50 p-8 text-center">
               <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-cream-dark/40 text-terracotta">
                 <FileText className="h-10 w-10" />
@@ -231,7 +243,7 @@ export default function PapersPage() {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            removePaper(paper.id);
+                            removePaper(paper.id, paper.title);
                           }}
                           className="rounded-lg p-2 text-aubergine/30 opacity-100 transition-colors hover:bg-cream-dark/40 hover:text-terracotta sm:opacity-0 sm:group-hover:opacity-100"
                         >
