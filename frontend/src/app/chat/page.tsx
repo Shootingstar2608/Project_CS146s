@@ -1,30 +1,25 @@
 "use client";
 
-import { ChangeEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ChevronRight,
-  Maximize2,
-  MessageSquare,
-  Paperclip,
-  Plus,
-  Search,
-  Send,
-  Share2,
-  Trash2,
-  Upload,
-} from "lucide-react";
+import { PanelLeft, PanelRight, Plus, Sparkles } from "lucide-react";
 import { getErrorMessage, sendMessage as sendBackendMessage, uploadDocument } from "@/lib/api";
 import { queryKeys, useDocuments } from "@/lib/queries";
 import { useResearchStore } from "@/lib/research-store";
-import Markdown from "@/components/ui/Markdown";
-import { cn } from "@/lib/utils";
+import ChatComposer from "@/components/chat/ChatComposer";
+import ChatMessage from "@/components/chat/ChatMessage";
+import InspectorDrawer from "@/components/chat/InspectorDrawer";
+import SessionsDrawer from "@/components/chat/SessionsDrawer";
+import SuggestionChips from "@/components/chat/SuggestionChips";
+
+type InspectorTab = "sources" | "trace";
 
 export default function ChatPage() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+
   const sessions = useResearchStore((state) => state.sessions);
   const activeSessionId = useResearchStore((state) => state.activeSessionId);
   const createSession = useResearchStore((state) => state.createSession);
@@ -32,28 +27,38 @@ export default function ChatPage() {
   const deleteSession = useResearchStore((state) => state.deleteSession);
   const appendUserMessage = useResearchStore((state) => state.appendUserMessage);
   const appendAssistantMessage = useResearchStore((state) => state.appendAssistantMessage);
+
   const { data: papers = [] } = useDocuments();
+
   const [draft, setDraft] = useState("");
-  const [sessionQuery, setSessionQuery] = useState("");
-  const [detailTab, setDetailTab] = useState<"sources" | "trace">("sources");
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSessions, setShowSessions] = useState(false);
+  const [showInspector, setShowInspector] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("sources");
+  const [selectedMessageId, setSelectedMessageId] = useState<string>();
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
+  const messages = useMemo(() => activeSession?.messages ?? [], [activeSession]);
+  const isEmpty = messages.length === 0;
 
   // Keep the latest message (and the typing indicator) in view.
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [activeSession?.messages.length, isSending]);
-  const filteredSessions = useMemo(() => {
-    const normalized = sessionQuery.trim().toLowerCase();
-    if (!normalized) return sessions;
-    return sessions.filter((session) => session.title.toLowerCase().includes(normalized));
-  }, [sessionQuery, sessions]);
+  }, [messages.length, isSending]);
 
-  const latestAssistantMessage = [...(activeSession?.messages ?? [])].reverse().find((message) => message.role === "assistant");
-  const sourcePapers = papers.filter((paper) => latestAssistantMessage?.sourcePaperIds.includes(paper.id));
+  // The answer whose sources/trace the inspector shows (defaults to the latest answer).
+  const latestAssistant = useMemo(
+    () => [...messages].reverse().find((message) => message.role === "assistant"),
+    [messages]
+  );
+  const selectedMessage = messages.find((message) => message.id === selectedMessageId) ?? latestAssistant;
+  const inspectorSourcePapers = papers.filter((paper) => selectedMessage?.sourcePaperIds.includes(paper.id));
+  const inspectorReasoning = selectedMessage?.reasoningSteps ?? [];
+
+  const sourceCountFor = (sourcePaperIds: string[]) =>
+    papers.filter((paper) => sourcePaperIds.includes(paper.id)).length;
 
   const handleSend = async () => {
     const message = draft.trim();
@@ -83,13 +88,6 @@ export default function ChatPage() {
     }
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      handleSend();
-    }
-  };
-
   const handleAttach = async (event: ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files || event.target.files.length === 0) return;
     setIsUploading(true);
@@ -109,142 +107,133 @@ export default function ChatPage() {
     }
   };
 
+  const pickSuggestion = (prompt: string) => {
+    setDraft(prompt);
+    requestAnimationFrame(() => composerRef.current?.focus());
+  };
+
+  const handleNewChat = () => {
+    createSession();
+    setSelectedMessageId(undefined);
+    setShowSessions(false);
+  };
+
+  const handleSelectSession = (id: string) => {
+    setActiveSession(id);
+    setSelectedMessageId(undefined);
+    setShowSessions(false);
+  };
+
+  const openInspector = (messageId: string, tab: InspectorTab) => {
+    setSelectedMessageId(messageId);
+    setInspectorTab(tab);
+    setShowInspector(true);
+  };
+
+  const composerProps = {
+    value: draft,
+    onChange: setDraft,
+    onSubmit: handleSend,
+    onAttach: handleAttach,
+    isSending,
+    isUploading,
+    inputRef: composerRef,
+  };
+
   return (
-    <div className="grid min-h-[calc(100vh-140px)] gap-6 xl:grid-cols-[280px_minmax(0,1fr)_340px]">
-      <aside className="flex min-h-[420px] flex-col overflow-hidden rounded-[28px] border border-aubergine/5 bg-surface/50">
-        <div className="border-b border-aubergine/5 p-6">
-          <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-aubergine/40">Conversations</h3>
+    <div className="relative flex h-[calc(100vh-140px)] min-h-[520px] flex-col overflow-hidden rounded-[28px] bg-surface shadow-soft">
+      {/* Header */}
+      <header className="flex items-center justify-between gap-3 border-b border-aubergine/5 px-3 py-2.5 sm:px-4">
+        <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => createSession()}
-            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-aubergine/10 py-3 text-sm font-bold text-aubergine/60 transition-colors hover:border-terracotta/40 hover:text-terracotta"
+            aria-label="Open conversations"
+            aria-expanded={showSessions}
+            title="Conversations"
+            onClick={() => setShowSessions(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-aubergine/50 transition-colors hover:bg-cream-dark/30 hover:text-aubergine"
           >
-            <Plus className="h-4 w-4" />
-            <span>New chat</span>
+            <PanelLeft className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            aria-label="New chat"
+            title="New chat"
+            onClick={handleNewChat}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-aubergine/50 transition-colors hover:bg-cream-dark/30 hover:text-aubergine"
+          >
+            <Plus className="h-5 w-5" />
           </button>
         </div>
-
-        <div className="flex-1 overflow-y-auto p-4">
-          {filteredSessions.length === 0 ? (
-            <div className="rounded-2xl bg-cream-dark/20 p-4 text-sm leading-6 text-aubergine/45">
-              {sessionQuery.trim() ? "No conversations match your search." : "No conversations yet. Start with New chat or send a question."}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {filteredSessions.map((session) => {
-                const isActive = activeSession?.id === session.id;
-                return (
-                  <div
-                    key={session.id}
-                    className={cn(
-                      "group flex items-center gap-2 rounded-xl p-2 transition-colors",
-                      isActive ? "bg-cream-dark/30" : "hover:bg-cream-dark/20"
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setActiveSession(session.id)}
-                      className={cn(
-                        "flex min-w-0 flex-1 items-center gap-3 rounded-lg p-2 text-left",
-                        isActive && "border-l-4 border-terracotta"
-                      )}
-                    >
-                      <MessageSquare className={cn("h-4 w-4 flex-shrink-0", isActive ? "text-terracotta" : "text-aubergine/40")} />
-                      <span className={cn("line-clamp-1 text-sm font-medium", isActive ? "text-aubergine" : "text-aubergine/60")}>
-                        {session.title}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Delete ${session.title}`}
-                      onClick={() => deleteSession(session.id)}
-                      className="rounded-lg p-2 text-aubergine/25 opacity-100 transition-colors hover:bg-surface hover:text-terracotta sm:opacity-0 sm:group-hover:opacity-100"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+        <h1 className="min-w-0 flex-1 truncate text-center text-sm font-bold text-aubergine">
+          {activeSession?.title ?? "New chat"}
+        </h1>
+        <div className="flex items-center gap-2">
+          <span className="hidden items-center gap-1.5 rounded-full bg-cream-dark/30 px-3 py-1 text-[10px] font-mono text-aubergine/60 sm:flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-sage" />
+            {papers.length} papers
+          </span>
+          <button
+            type="button"
+            aria-label="Open answer details"
+            aria-expanded={showInspector}
+            title="Sources & trace"
+            onClick={() => setShowInspector(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-aubergine/50 transition-colors hover:bg-cream-dark/30 hover:text-aubergine"
+          >
+            <PanelRight className="h-5 w-5" />
+          </button>
         </div>
+      </header>
 
-        <div className="border-t border-aubergine/5 p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-aubergine/30" />
-            <input
-              type="text"
-              value={sessionQuery}
-              onChange={(event) => setSessionQuery(event.target.value)}
-              placeholder="Search conversations..."
-              className="w-full rounded-lg bg-cream-dark/20 py-2 pl-9 pr-3 text-xs font-mono focus:outline-none"
-            />
-          </div>
-        </div>
-      </aside>
-
-      <section className="flex min-h-[620px] min-w-0 flex-col overflow-hidden rounded-[28px] bg-surface shadow-soft">
-        <div className="flex flex-col gap-4 border-b border-aubergine/5 p-6">
-          <h1 className="text-xl font-bold text-aubergine">{activeSession?.title ?? "Research chat"}</h1>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 rounded-full bg-cream-dark/30 px-3 py-1 text-[10px] font-mono text-aubergine/60">
-              <div className="h-1.5 w-1.5 rounded-full bg-sage" />
-              <span>{papers.length} local papers</span>
+      {/* Messages / empty state */}
+      <div className="flex-1 overflow-y-auto">
+        {isEmpty ? (
+          <div className="mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center px-4 text-center">
+            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-terracotta/10 text-terracotta">
+              <Sparkles className="h-7 w-7" />
             </div>
-            <div className="flex items-center gap-2 rounded-full bg-cream-dark/30 px-3 py-1 text-[10px] font-mono text-aubergine/60">
-              <div className="h-1.5 w-1.5 rounded-full bg-lilac" />
-              <span>backend GraphRAG</span>
+            <h2 className="text-3xl font-extrabold tracking-tight text-aubergine sm:text-4xl">
+              What do you want to research?
+            </h2>
+            <p className="mt-3 max-w-md text-sm leading-6 text-aubergine/55">
+              Questions run through the GraphRAG agent and cite your indexed papers when the graph has matching context.
+            </p>
+            <div className="mt-7 w-full">
+              <ChatComposer variant="hero" autoFocus placeholder="Ask anything about your papers…" {...composerProps} />
             </div>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6">
-          {!activeSession || activeSession.messages.length === 0 ? (
-            <div className="flex h-full min-h-[360px] flex-col items-center justify-center text-center">
-              <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-cream-dark/30 text-terracotta">
-                <MessageSquare className="h-10 w-10" />
-              </div>
-              <h2 className="text-2xl font-extrabold text-aubergine">Ask the local library</h2>
-              <p className="mt-2 max-w-md text-sm leading-6 text-aubergine/50">
-                Questions go through the backend GraphRAG agent and cite uploaded papers when the graph has matching context.
-              </p>
-              {papers.length === 0 && (
-                <Link href="/upload" className="mt-6 flex items-center gap-2 rounded-lg bg-terracotta px-5 py-3 font-bold text-surface shadow-soft">
-                  <Upload className="h-5 w-5" />
-                  Upload papers
+            <div className="mt-5">
+              <SuggestionChips onPick={pickSuggestion} />
+            </div>
+            {papers.length === 0 && (
+              <p className="mt-6 text-xs text-aubergine/45">
+                No papers yet —{" "}
+                <Link href="/upload" className="font-semibold text-terracotta hover:underline">
+                  upload to ground answers
                 </Link>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-8">
-              {activeSession.messages.map((message) => (
-                <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
-                  <div
-                    className={cn(
-                      "max-w-[90%] rounded-[20px] p-4 text-sm leading-relaxed sm:max-w-[76%]",
-                      message.role === "user"
-                        ? "whitespace-pre-line bg-terracotta text-surface shadow-soft"
-                        : "border border-aubergine/5 bg-cream-dark/10 text-aubergine"
-                    )}
-                  >
-                    {message.role === "assistant" ? (
-                      <>
-                        <div className="mb-3 flex items-center gap-2 border-b border-aubergine/5 pb-2 text-[10px] font-mono text-aubergine/40">
-                          <ChevronRight className="h-3 w-3" />
-                          <span>GraphRAG answer</span>
-                        </div>
-                        <Markdown>{message.content}</Markdown>
-                      </>
-                    ) : (
-                      message.content
-                    )}
-                  </div>
-                </div>
+                .
+              </p>
+            )}
+            {error && <p className="mt-4 text-xs font-medium text-terracotta">{error}</p>}
+          </div>
+        ) : (
+          <div className="mx-auto w-full max-w-3xl px-4 py-6">
+            <div className="flex flex-col gap-7">
+              {messages.map((message) => (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  sourceCount={sourceCountFor(message.sourcePaperIds)}
+                  onOpenSources={() => openInspector(message.id, "sources")}
+                  onOpenTrace={() => openInspector(message.id, "trace")}
+                />
               ))}
-
               {isSending && (
-                <div className="flex justify-start">
-                  <div className="flex items-center gap-3 rounded-[20px] border border-aubergine/5 bg-cream-dark/10 px-4 py-3 text-sm text-aubergine/60">
+                <div className="flex gap-3">
+                  <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-terracotta/10 text-terracotta">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div className="flex items-center gap-3 rounded-[20px] bg-cream-dark/15 px-4 py-3 text-sm text-aubergine/60">
                     <span className="flex gap-1" aria-hidden>
                       <span className="h-2 w-2 animate-bounce rounded-full bg-terracotta/60 [animation-delay:-0.2s] motion-reduce:animate-none" />
                       <span className="h-2 w-2 animate-bounce rounded-full bg-terracotta/60 [animation-delay:-0.1s] motion-reduce:animate-none" />
@@ -256,115 +245,40 @@ export default function ChatPage() {
               )}
               <div ref={messagesEndRef} />
             </div>
-          )}
-        </div>
-
-        <div className="p-5 sm:p-6">
-          <div className="relative flex items-end gap-3 rounded-2xl border border-aubergine/10 bg-surface p-3 shadow-soft focus-within:ring-2 focus-within:ring-terracotta/10">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".pdf,application/pdf"
-              onChange={handleAttach}
-              className="hidden"
-            />
-            <button
-              type="button"
-              aria-label="Attach papers"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className="mb-1 cursor-pointer p-2 text-aubergine/30 transition-colors hover:text-aubergine disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Paperclip className="h-5 w-5" />
-            </button>
-            <textarea
-              rows={1}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask a research question..."
-              className="max-h-32 min-h-10 flex-1 resize-none py-2 text-sm focus:outline-none"
-            />
-            <button
-              type="button"
-              aria-label="Send message"
-              onClick={handleSend}
-              disabled={draft.trim().length === 0 || isSending}
-              className="cursor-pointer rounded-xl bg-terracotta p-2 text-surface shadow-soft transition-transform hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:scale-100"
-            >
-              <Send className="h-5 w-5" />
-            </button>
           </div>
-          {error && <p className="mt-3 text-xs font-medium text-terracotta">{error}</p>}
-        </div>
-      </section>
+        )}
+      </div>
 
-      <aside className="relative flex min-h-[420px] flex-col overflow-hidden rounded-[28px] border border-aubergine/5 bg-surface/50">
-        <div className="flex items-center justify-between border-b border-aubergine/5 p-6">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-aubergine/40">Reasoning Graph</h3>
-          <Share2 className="h-4 w-4 text-aubergine/30" />
+      {/* Docked composer (active conversation) */}
+      {!isEmpty && (
+        <div className="border-t border-aubergine/5 bg-surface/80 px-4 py-3 backdrop-blur">
+          <div className="mx-auto w-full max-w-3xl">
+            <ChatComposer variant="docked" autoFocus {...composerProps} />
+            {error && <p className="mt-2 text-xs font-medium text-terracotta">{error}</p>}
+            <p className="mt-2 text-center text-[11px] text-aubergine/35">
+              GraphRAG can be inaccurate — verify cited sources.
+            </p>
+          </div>
         </div>
+      )}
 
-        <div className="flex gap-2 border-b border-aubergine/5 p-4">
-          <button
-            type="button"
-            onClick={() => setDetailTab("sources")}
-            className={cn("flex-1 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-wider", detailTab === "sources" ? "bg-surface text-terracotta shadow-soft" : "text-aubergine/35")}
-          >
-            Sources
-          </button>
-          <button
-            type="button"
-            onClick={() => setDetailTab("trace")}
-            className={cn("flex-1 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-wider", detailTab === "trace" ? "bg-surface text-terracotta shadow-soft" : "text-aubergine/35")}
-          >
-            Trace
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6">
-          {detailTab === "sources" ? (
-            sourcePapers.length > 0 ? (
-              <div className="flex flex-col gap-3">
-                {sourcePapers.map((paper) => (
-                  <div key={paper.id} className="rounded-2xl bg-surface p-4 shadow-soft">
-                    <div className="line-clamp-2 text-sm font-extrabold text-aubergine">{paper.title}</div>
-                    <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-aubergine/35">
-                      {paper.categories?.join(", ")}{paper.year ? ` | ${paper.year}` : ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
-                <div className="mb-4 flex h-28 w-28 items-center justify-center rounded-full border-2 border-dashed border-aubergine/10">
-                  <Share2 className="h-10 w-10 text-aubergine/10" />
-                </div>
-                <p className="max-w-[190px] text-xs leading-5 text-aubergine/30">Ask a question to see retrieved local sources.</p>
-              </div>
-            )
-          ) : (
-            <ol className="flex flex-col gap-3 text-sm text-aubergine/60">
-              {(latestAssistantMessage?.reasoningSteps?.length ? latestAssistantMessage.reasoningSteps : ["Ask a question to see the backend retrieval plan."]).map((step, index) => (
-                <li key={`${step}-${index}`} className="rounded-2xl bg-surface p-4 shadow-soft">
-                  {index + 1}. {step}
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-
-        <div className="absolute bottom-6 right-6">
-          <Link
-            href="/graph"
-            aria-label="Open full graph"
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface text-aubergine/60 shadow-soft hover:text-aubergine"
-          >
-            <Maximize2 className="h-5 w-5" />
-          </Link>
-        </div>
-      </aside>
+      <SessionsDrawer
+        open={showSessions}
+        onClose={() => setShowSessions(false)}
+        sessions={sessions}
+        activeSessionId={activeSession?.id}
+        onCreate={handleNewChat}
+        onSelect={handleSelectSession}
+        onDelete={deleteSession}
+      />
+      <InspectorDrawer
+        open={showInspector}
+        onClose={() => setShowInspector(false)}
+        tab={inspectorTab}
+        onTabChange={setInspectorTab}
+        sourcePapers={inspectorSourcePapers}
+        reasoningSteps={inspectorReasoning}
+      />
     </div>
   );
 }
