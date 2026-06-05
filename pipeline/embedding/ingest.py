@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import List
+from typing import Any, Callable, List
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,7 @@ def ingest_pdf(
     file_path: str,
     paper_id: str | None = None,
     save_index: bool = True,
+    progress_callback: Callable[[str, str, dict[str, Any] | None], None] | None = None,
 ) -> dict:
     """
     Full ingestion pipeline for a single PDF file.
@@ -54,13 +55,19 @@ def ingest_pdf(
     file_path = str(file_path)
     paper_id = paper_id or Path(file_path).stem
 
+    def emit(phase: str, message: str, metadata: dict[str, Any] | None = None) -> None:
+        if progress_callback:
+            progress_callback(phase, message, metadata)
+
     logger.info("[ingest] Starting: %s (paper_id=%s)", file_path, paper_id)
+    emit("started", "Started PDF ingestion.")
 
     # ── Step 1: Parse PDF ─────────────────────────────────────────────────────
     parsed = parse_pdf(file_path)
     full_text: str = parsed["full_text"]
     num_pages: int = parsed["num_pages"]
     logger.info("[ingest] Parsed %d pages", num_pages)
+    emit("parsed", f"Parsed {num_pages} page{'' if num_pages == 1 else 's'}.", {"num_pages": num_pages})
 
     # ── Step 2: Extract paper metadata via LLM or local heuristics ───────────
     fallback_title = _fallback_title_from_path(file_path, paper_id)
@@ -71,10 +78,12 @@ def ingest_pdf(
     keywords = meta.get("keywords", [])
     abstract = meta.get("abstract", "")
     logger.info("[ingest] Metadata: title=%r  authors=%s  year=%s", title, authors, year)
+    emit("metadata", "Extracted and saved paper metadata.", {"title": title, "authors": authors, "year": year})
 
     # ── Step 3: Split into sections ───────────────────────────────────────────
     sections = split_into_sections(full_text)
     logger.info("[ingest] %d sections detected", len(sections))
+    emit("sectioned", f"Detected {len(sections)} section{'' if len(sections) == 1 else 's'}.", {"sections": len(sections)})
 
     # ── Step 4: Chunk each section ────────────────────────────────────────────
     all_chunks = []
@@ -95,23 +104,18 @@ def ingest_pdf(
         global_offset += len(chunks)
 
     logger.info("[ingest] Total chunks: %d", len(all_chunks))
+    emit("chunked", f"Created {len(all_chunks)} text chunk{'' if len(all_chunks) == 1 else 's'}.", {"num_chunks": len(all_chunks)})
 
     if not all_chunks:
         logger.warning("[ingest] No chunks produced for %s — skipping embedding", file_path)
-        return {
-            "paper_id": paper_id,
-            "title": title,
-            "num_chunks": 0,
-            "num_pages": num_pages,
-            "authors": authors,
-            "year": year,
-        }
+        raise ValueError("Cannot process this PDF because no extractable text chunks were found.")
 
     # ── Step 5: Embed ─────────────────────────────────────────────────────────
     embedder = get_embedder()
     texts = [c.text for c in all_chunks]
     embeddings = embedder.embed_texts(texts)
     logger.info("[ingest] Embeddings computed: shape=%s", embeddings.shape)
+    emit("embedded", "Computed vector embeddings.", {"shape": str(embeddings.shape)})
 
     # ── Step 6: Add to FAISS index ────────────────────────────────────────────
     from pipeline.embedding.vector_store import vector_store_lock
@@ -122,6 +126,7 @@ def ingest_pdf(
         if save_index:
             store.save()
             logger.info("[ingest] FAISS index saved.")
+    emit("faiss_saved", "Saved chunks to the FAISS vector index.", {"num_chunks": len(all_chunks)})
 
     # ── Step 7: Write Paper + entities/relations to Neo4j ────────────────────
     kg_result = _write_to_neo4j(
@@ -140,6 +145,14 @@ def ingest_pdf(
                 paper_id, len(all_chunks),
                 kg_result.get("entity_count", 0),
                 kg_result.get("relation_count", 0))
+    emit(
+        "graph_written",
+        "Saved metadata, entities, and relationships to Neo4j.",
+        {
+            "entity_count": kg_result.get("entity_count", 0),
+            "relation_count": kg_result.get("relation_count", 0),
+        },
+    )
     return {
         "paper_id": paper_id,
         "title": title,

@@ -6,7 +6,7 @@ const SUGGESTIONS = [
   {
     icon: FileText,
     label: "Summarize a paper",
-    prompt: "Summarize the key contributions of one of my indexed papers.",
+    prompt: "Summarize the key contributions of one of my completed papers.",
   },
   {
     icon: GitCompare,
@@ -16,7 +16,7 @@ const SUGGESTIONS = [
   {
     icon: Database,
     label: "Which datasets are used?",
-    prompt: "Which datasets are used across my indexed papers?",
+    prompt: "Which datasets are used across my completed papers?",
   },
   {
     icon: BarChart3,

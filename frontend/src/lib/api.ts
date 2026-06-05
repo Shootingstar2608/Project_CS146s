@@ -10,12 +10,25 @@ export type BackendPaper = {
   fileType: string;
   fileSize: number;
   categories: string[];
-  status: "indexed" | "needs_review";
+  status: "processing" | "completed" | "failed";
   authors: string[];
   year?: string;
   abstract?: string;
   addedAt: string;
+  completedAt?: string;
+  errorMessage?: string;
+  entityCount?: number;
+  relationCount?: number;
   downloadUrl?: string;
+};
+
+export type DocumentJobEvent = {
+  document_id: string;
+  status: "processing" | "completed" | "failed" | "heartbeat";
+  phase: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+  timestamp: string;
 };
 
 type ErrorPayload = {
@@ -59,6 +72,11 @@ export const uploadDocument = async (file: File) => {
   const response = await api.post("/upload/", formData);
   return response.data;
 };
+
+export function documentEventsUrl(documentId: string) {
+  const wsOrigin = apiOrigin.replace(/^http/i, "ws");
+  return `${wsOrigin}/api/v1/jobs/documents/${documentId}/events`;
+}
 
 export const deleteDocument = async (id: string) => {
   // Backend cascades the delete across Postgres, Neo4j, FAISS, and disk.

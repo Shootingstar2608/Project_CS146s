@@ -7,6 +7,7 @@ import { CheckCircle2, FileText, FolderOpen, Library, UploadCloud, X } from "luc
 import { formatFileSize } from "@/lib/research-store";
 import { getErrorMessage, uploadDocument } from "@/lib/api";
 import { queryKeys, useDocuments } from "@/lib/queries";
+import { useDocumentEvents } from "@/lib/use-document-events";
 import { cn } from "@/lib/utils";
 
 export default function UploadPage() {
@@ -20,8 +21,9 @@ export default function UploadPage() {
 
   const queryClient = useQueryClient();
   const { data: documents = [] } = useDocuments();
+  useDocumentEvents(documents);
   const papersCount = documents.length;
-  const indexedCount = documents.filter((doc) => doc.status === "indexed").length;
+  const indexedCount = documents.filter((doc) => doc.status === "completed").length;
 
   const totalQueuedSize = useMemo(
     () => queuedFiles.reduce((total, file) => total + file.size, 0),

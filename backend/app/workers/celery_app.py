@@ -70,6 +70,19 @@ def _update_document_status_sync(
 
     try:
         asyncio.run(_run_update())
+        from app.core.job_events import publish_document_event
+
+        publish_document_event(
+            paper_id,
+            status,
+            status,
+            error_message or f"Document ingestion {status}.",
+            {
+                "entity_count": (result or {}).get("entity_count", 0),
+                "relation_count": (result or {}).get("relation_count", 0),
+                "title": (result or {}).get("title"),
+            },
+        )
     except Exception as exc:
         logger.error("[Celery] Failed to update status for %s: %s", paper_id, exc)
 
@@ -96,10 +109,19 @@ def ingest_pdf_task(self, file_path: str, paper_id: str = None) -> dict:
     import logging
     logger = logging.getLogger(__name__)
     logger.info("[Celery] ingest_pdf_task started: %s", file_path)
+    if paper_id:
+        from app.core.job_events import publish_document_event
+
+        publish_document_event(paper_id, "processing", "started", "Started background PDF processing.")
 
     try:
         from pipeline.embedding.ingest import ingest_pdf
-        result = ingest_pdf(file_path, paper_id=paper_id)
+
+        def publish_progress(phase: str, message: str, metadata: dict | None = None) -> None:
+            if paper_id:
+                publish_document_event(paper_id, "processing", phase, message, metadata)
+
+        result = ingest_pdf(file_path, paper_id=paper_id, progress_callback=publish_progress)
         logger.info("[Celery] ingest_pdf_task done: %s", result)
         
         # Update status to completed in DB

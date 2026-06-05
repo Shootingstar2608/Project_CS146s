@@ -23,6 +23,7 @@ from starlette.status import HTTP_201_CREATED
 
 from app.config import get_settings
 from app.core.database import get_session_factory
+from app.core.job_events import publish_document_event
 from app.models.db_models import Document
 from app.models.schemas import UploadResponse
 
@@ -118,6 +119,7 @@ async def upload_pdf(file: UploadFile = File(...)) -> UploadResponse:
         ingest_pdf_task.delay(str(file_path), paper_id=doc_id)
         task_dispatched = True
         logger.info("Celery task dispatched for: %s", file_path)
+        publish_document_event(doc_id, "processing", "queued", "File received and queued for background processing.")
     except Exception as exc:
         logger.warning(
             "Celery unavailable (%s) — falling back to inline ingestion.", exc
@@ -129,7 +131,12 @@ async def upload_pdf(file: UploadFile = File(...)) -> UploadResponse:
     if not task_dispatched:
         try:
             from pipeline.embedding.ingest import ingest_pdf
-            result = ingest_pdf(str(file_path), paper_id=doc_id)
+            publish_document_event(doc_id, "processing", "started", "Started inline PDF processing.")
+
+            def publish_progress(phase: str, message: str, metadata: dict | None = None) -> None:
+                publish_document_event(doc_id, "processing", phase, message, metadata)
+
+            result = ingest_pdf(str(file_path), paper_id=doc_id, progress_callback=publish_progress)
             # Update document status to completed
             async with get_session_factory()() as db:
                 doc_obj = await db.get(Document, doc_id)
@@ -138,6 +145,18 @@ async def upload_pdf(file: UploadFile = File(...)) -> UploadResponse:
                     doc_obj.entity_count = result.get("entity_count", 0)
                     doc_obj.relation_count = result.get("relation_count", 0)
                     await db.commit()
+            inline_status = "completed"
+            publish_document_event(
+                doc_id,
+                "completed",
+                "completed",
+                "Document processing completed.",
+                {
+                    "entity_count": result.get("entity_count", 0),
+                    "relation_count": result.get("relation_count", 0),
+                    "title": result.get("title"),
+                },
+            )
             logger.info("Inline ingestion completed for: %s", file_path)
         except Exception as exc:
             logger.error("Inline ingestion failed: %s", exc)
@@ -149,6 +168,7 @@ async def upload_pdf(file: UploadFile = File(...)) -> UploadResponse:
                     doc_obj.status = "failed"
                     doc_obj.error_message = str(exc)
                     await db.commit()
+            publish_document_event(doc_id, "failed", "failed", str(exc))
 
     return UploadResponse(
         document_id=doc_id,

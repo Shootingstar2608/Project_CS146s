@@ -43,7 +43,9 @@ def get_graph_data() -> Dict[str, List[Dict[str, Any]]]:
                n.description AS description,
                n.paper_id AS paper_id,
                n.result_id AS result_id,
-               n.year AS year
+               n.year AS year,
+               coalesce(n.categories, []) AS categories,
+               coalesce(n.keywords, []) AS keywords
         LIMIT 200
         """
         nodes_result = Neo4jClient.execute_query(nodes_query)
@@ -76,6 +78,11 @@ def get_graph_data() -> Dict[str, List[Dict[str, Any]]]:
                 "aliases": r.get("aliases") or [],
                 "description": r.get("description") or "",
                 "original_id": r.get("paper_id") or r.get("result_id") or None,
+                "metadata": {
+                    "year": r.get("year"),
+                    "categories": r.get("categories") or [],
+                    "keywords": r.get("keywords") or [],
+                },
             })
 
         formatted_links = []
@@ -110,7 +117,9 @@ def get_graph_subgraph(paper_id: str) -> Dict[str, List[Dict[str, Any]]]:
                p.description AS description,
                p.paper_id AS paper_id,
                p.result_id AS result_id,
-               p.year AS year
+               p.year AS year,
+               coalesce(p.categories, []) AS categories,
+               coalesce(p.keywords, []) AS keywords
         """
         paper_result = Neo4jClient.execute_query(paper_query, {"paper_id": paper_id})
 
@@ -126,7 +135,9 @@ def get_graph_subgraph(paper_id: str) -> Dict[str, List[Dict[str, Any]]]:
                         n.description AS description,
                         n.paper_id AS paper_id,
                         n.result_id AS result_id,
-                        n.year AS year
+                        n.year AS year,
+                        coalesce(n.categories, []) AS categories,
+                        coalesce(n.keywords, []) AS keywords
         """
         neighbors_result = Neo4jClient.execute_query(neighbors_query, {"paper_id": paper_id})
 
@@ -164,6 +175,11 @@ def get_graph_subgraph(paper_id: str) -> Dict[str, List[Dict[str, Any]]]:
                 "aliases": r.get("aliases") or [],
                 "description": r.get("description") or "",
                 "original_id": r.get("paper_id") or r.get("result_id") or None,
+                "metadata": {
+                    "year": r.get("year"),
+                    "categories": r.get("categories") or [],
+                    "keywords": r.get("keywords") or [],
+                },
             })
 
         formatted_links = []

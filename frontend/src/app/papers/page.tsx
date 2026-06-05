@@ -19,13 +19,21 @@ import {
   ViewMode,
 } from "@/lib/research-store";
 import { useDeleteDocument, useDocuments } from "@/lib/queries";
+import { useDocumentEvents } from "@/lib/use-document-events";
 import ErrorState from "@/components/ui/ErrorState";
 import Skeleton from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 
 const statusLabels: Record<PaperStatus, string> = {
-  indexed: "Indexed",
-  needs_review: "Needs review",
+  processing: "Processing",
+  completed: "Completed",
+  failed: "Cannot process",
+};
+
+const statusDots: Record<PaperStatus, string> = {
+  processing: "bg-[#D9A547]",
+  completed: "bg-[#5E9A6B]",
+  failed: "bg-terracotta",
 };
 
 const categoryColors: Record<PaperCategory, string> = {
@@ -39,6 +47,7 @@ const categoryColors: Record<PaperCategory, string> = {
 
 export default function PapersPage() {
   const { data: papers = [], isPending, isError, refetch } = useDocuments();
+  useDocumentEvents(papers);
   const deleteMutation = useDeleteDocument();
   const [query, setQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -175,7 +184,7 @@ export default function PapersPage() {
                       status === item ? "bg-surface shadow-soft" : "hover:bg-surface/50"
                     )}
                   >
-                    <span className={cn("h-2 w-2 rounded-full", item === "indexed" ? "bg-[#5E9A6B]" : "bg-[#D9A547]")} />
+                    <span className={cn("h-2 w-2 rounded-full", statusDots[item])} />
                     <span className="text-sm font-medium text-aubergine/80">{statusLabels[item]}</span>
                   </button>
                 ))}
@@ -257,10 +266,18 @@ export default function PapersPage() {
                         {paper.categories?.map((cat: string) => (
                           <span key={cat} className="rounded-full bg-cream-dark/40 px-3 py-1">{cat}</span>
                         ))}
-                        <span className="rounded-full bg-cream-dark/40 px-3 py-1">{statusLabels[paper.status] || "Needs review"}</span>
+                        <span className="rounded-full bg-cream-dark/40 px-3 py-1">{statusLabels[paper.status]}</span>
                         {paper.year && <span className="rounded-full bg-cream-dark/40 px-3 py-1">{paper.year}</span>}
                         <span className="font-mono normal-case tracking-normal">{formatFileSize(paper.fileSize)}</span>
                       </div>
+                      {paper.status === "processing" && (
+                        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-cream-dark/40">
+                          <div className="h-full w-1/2 animate-pulse rounded-full bg-[#D9A547]" />
+                        </div>
+                      )}
+                      {paper.status === "failed" && paper.errorMessage && (
+                        <p className="mt-3 line-clamp-2 text-xs leading-5 text-terracotta">{paper.errorMessage}</p>
+                      )}
                     </div>
                   </article>
                 </Link>

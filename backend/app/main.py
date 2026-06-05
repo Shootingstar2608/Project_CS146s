@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import upload, router_chat, router_documents, router_graph, router_files
+from app.api import upload, router_chat, router_documents, router_graph, router_files, router_jobs
 from app.config import get_settings
 from app.core.database import init_db, close_db
 from app.core.neo4j_client import close_driver
@@ -98,6 +98,7 @@ app.include_router(router_chat.router, prefix="/api/v1")
 app.include_router(router_documents.router, prefix="/api/v1")
 app.include_router(router_graph.router, prefix="/api/v1")
 app.include_router(router_files.router, prefix="/api/v1")
+app.include_router(router_jobs.router, prefix="/api/v1")
 
 # ── Health check ──────────────────────────────────────────────────────────────
 @app.get("/health", tags=["System"])

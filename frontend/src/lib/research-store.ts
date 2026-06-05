@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-export type PaperStatus = "indexed" | "needs_review";
+export type PaperStatus = "processing" | "completed" | "failed";
 
 export type PaperCategory =
   | "ML/AI"
@@ -71,6 +71,11 @@ export type GraphNode = {
   aliases?: string[];
   description?: string;
   original_id?: string | null;
+  metadata?: {
+    year?: string | number | null;
+    categories?: string[];
+    keywords?: string[];
+  };
 };
 
 export type GraphLink = {
@@ -166,7 +171,7 @@ function makePaper(input: NewPaperInput): Paper {
     fileType: input.fileType || "application/octet-stream",
     fileSize: input.fileSize,
     categories: inferCategory(searchable),
-    status: input.abstract || input.fileType === "application/pdf" ? "indexed" : "needs_review",
+    status: input.abstract || input.fileType === "application/pdf" ? "completed" : "processing",
     authors: inferAuthors(searchable),
     year: inferYear(searchable),
     abstract: input.abstract,

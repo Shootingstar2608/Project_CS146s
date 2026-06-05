@@ -103,6 +103,18 @@ function formatEdgeLabel(label: string) {
   return label.replace(/_/g, " ");
 }
 
+function nodeMetaLine(node: GraphNode, selectedPaper?: { authors?: string[]; year?: string; categories?: string[] }) {
+  const year = selectedPaper?.year ?? node.metadata?.year;
+  const category = selectedPaper?.categories?.[0] ?? node.metadata?.categories?.[0];
+  if (node.kind === "paper") {
+    return [year, category].filter(Boolean).join(" | ") || "Paper";
+  }
+  if (node.kind === "author" && selectedPaper?.authors?.length) {
+    return "Author";
+  }
+  return prettyKind(node.kind);
+}
+
 function resolveNodeId(nodeRef: GraphEdge["source"] | GraphEdge["target"]) {
   return typeof nodeRef === "string" ? nodeRef : nodeRef.id;
 }
@@ -113,12 +125,18 @@ function drawLabelBubble(
   x: number,
   y: number,
   textSize: number,
-  globalScale: number
+  globalScale: number,
+  subtitle?: string
 ) {
   ctx.font = `${textSize / globalScale}px Inter, sans-serif`;
   const metrics = ctx.measureText(text);
-  const width = Math.min(260 / globalScale, Math.max(96 / globalScale, metrics.width + 18 / globalScale));
-  const height = 22 / globalScale;
+  const subtitleSize = Math.max(7, textSize - 2);
+  const subtitleMetrics = subtitle ? ctx.measureText(subtitle) : { width: 0 };
+  const width = Math.min(
+    260 / globalScale,
+    Math.max(96 / globalScale, Math.max(metrics.width, subtitleMetrics.width) + 18 / globalScale)
+  );
+  const height = (subtitle ? 34 : 22) / globalScale;
   const rectX = x - width / 2;
   const rectY = y - height / 2;
 
@@ -133,7 +151,12 @@ function drawLabelBubble(
   ctx.fillStyle = "#3A2E3D";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, x, y + 0.5 / globalScale);
+  ctx.fillText(text, x, y + (subtitle ? -5 : 0.5) / globalScale);
+  if (subtitle) {
+    ctx.font = `${subtitleSize / globalScale}px Inter, sans-serif`;
+    ctx.fillStyle = "rgba(58, 46, 61, 0.58)";
+    ctx.fillText(subtitle, x, y + 8 / globalScale);
+  }
 }
 
 function stableHash(value: string) {
@@ -312,6 +335,7 @@ export default function GraphPage() {
   const selectedNode = positionedNodes.find((node) => node.id === selectedNodeId);
   const activeNodeId = hoveredNodeId ?? selectedNodeId;
   const selectedPaper = papers.find((paper) => paper.id === selectedNode?.original_id || paper.title === selectedNode?.label);
+  const paperById = useMemo(() => new Map(papers.map((paper) => [paper.id, paper])), [papers]);
   const connectedEdges = useMemo(
     () => visibleGraph.links.filter((link) => resolveNodeId(link.source) === selectedNodeId || resolveNodeId(link.target) === selectedNodeId),
     [selectedNodeId, visibleGraph.links]
@@ -332,20 +356,29 @@ export default function GraphPage() {
     const style = nodeStyles[node.kind] ?? nodeStyles.category;
     const isActive = activeNodeId === node.id;
     const radius = isActive ? style.radius + 5 : style.radius;
+    const paper = node.original_id ? paperById.get(node.original_id) : undefined;
+    const showLabel = isActive || positionedNodes.length <= 80 || node.kind === "paper";
 
+    ctx.save();
+    ctx.shadowColor = "rgba(58, 46, 61, 0.18)";
+    ctx.shadowBlur = isActive ? 16 : 8;
+    ctx.shadowOffsetY = isActive ? 5 : 3;
     ctx.beginPath();
     ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
     ctx.fillStyle = style.fill;
     ctx.fill();
+    ctx.shadowColor = "transparent";
     ctx.lineWidth = isActive ? 4 : 2;
     ctx.strokeStyle = isActive ? "#3A2E3D" : style.stroke;
     ctx.stroke();
 
-    if (isActive) {
-      const shortLabel = node.label.length > 38 ? `${node.label.slice(0, 38)}…` : node.label;
-      const labelY = node.y > 330 ? node.y - radius - 18 : node.y + radius + 20;
-      drawLabelBubble(ctx, shortLabel, node.x, labelY, 10, globalScale);
+    if (showLabel) {
+      const limit = isActive ? 42 : 28;
+      const shortLabel = node.label.length > limit ? `${node.label.slice(0, limit)}...` : node.label;
+      const labelY = node.y > dimensions.height - 105 ? node.y - radius - 26 : node.y + radius + 26;
+      drawLabelBubble(ctx, shortLabel, node.x, labelY, isActive ? 10 : 8.5, globalScale, nodeMetaLine(node, paper));
     }
+    ctx.restore();
   };
 
   const renderLink = (link: GraphEdge, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -527,8 +560,40 @@ export default function GraphPage() {
                     </div>
                   ) : null}
                   {selectedNode.description ? <p className="mt-4 text-sm leading-6 text-aubergine/60">{selectedNode.description}</p> : null}
+                  <div className="mt-4 grid gap-2 text-xs text-aubergine/55">
+                    {selectedNode.original_id ? (
+                      <div className="rounded-xl bg-cream-dark/25 px-3 py-2">
+                        <span className="font-bold text-aubergine/65">ID: </span>
+                        <span className="font-mono">{selectedNode.original_id}</span>
+                      </div>
+                    ) : null}
+                    {selectedNode.metadata?.year ? (
+                      <div className="rounded-xl bg-cream-dark/25 px-3 py-2">
+                        <span className="font-bold text-aubergine/65">Year: </span>
+                        {selectedNode.metadata.year}
+                      </div>
+                    ) : null}
+                    {selectedNode.metadata?.categories?.length ? (
+                      <div className="rounded-xl bg-cream-dark/25 px-3 py-2">
+                        <span className="font-bold text-aubergine/65">Categories: </span>
+                        {selectedNode.metadata.categories.join(", ")}
+                      </div>
+                    ) : null}
+                    {selectedNode.metadata?.keywords?.length ? (
+                      <div className="rounded-xl bg-cream-dark/25 px-3 py-2">
+                        <span className="font-bold text-aubergine/65">Keywords: </span>
+                        {selectedNode.metadata.keywords.slice(0, 8).join(", ")}
+                      </div>
+                    ) : null}
+                  </div>
                   {selectedPaper && (
                     <div className="mt-5 space-y-3 text-sm text-aubergine/60">
+                      {selectedPaper.authors?.length ? (
+                        <p>
+                          <span className="font-bold text-aubergine/70">Authors: </span>
+                          {selectedPaper.authors.join(", ")}
+                        </p>
+                      ) : null}
                       <p>{selectedPaper.abstract || "This paper currently has local file metadata only."}</p>
                       <Link href="/chat" className="inline-flex rounded-lg bg-terracotta px-4 py-3 font-bold text-surface">
                         Ask about this paper

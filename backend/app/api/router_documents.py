@@ -59,19 +59,29 @@ async def get_documents(db: AsyncSession = Depends(get_db)):
         meta = neo4j_metadata.get(doc.id, {})
         
         categories = meta.get("categories", ["Uncategorized"])
+        file_size = 0
+        if doc.original_path:
+            try:
+                file_size = Path(doc.original_path).stat().st_size
+            except OSError:
+                file_size = 0
             
         papers.append({
             "id": doc.id,
             "title": meta.get("title") or doc.filename.replace(".pdf", ""),
             "fileName": doc.filename,
             "fileType": "application/pdf",
-            "fileSize": 0,
+            "fileSize": file_size,
             "categories": categories, 
-            "status": "indexed" if (doc.status == "completed" or meta.get("title")) else "needs_review",
+            "status": doc.status or "processing",
             "authors": meta.get("authors") or [],
             "year": meta.get("year") or "",
             "abstract": meta.get("abstract") or (doc.error_message if doc.status == "failed" else ""),
             "addedAt": doc.uploaded_at.isoformat() if doc.uploaded_at else "",
+            "completedAt": doc.completed_at.isoformat() if doc.completed_at else "",
+            "errorMessage": doc.error_message or "",
+            "entityCount": doc.entity_count or 0,
+            "relationCount": doc.relation_count or 0,
             "downloadUrl": f"/api/v1/files/{doc.id}/pdf",
         })
     return papers
