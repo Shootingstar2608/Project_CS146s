@@ -183,8 +183,8 @@ function layoutGraph(
 
   const adjacency: Record<string, string[]> = {};
   edges.forEach((e) => {
-    const s = String(e.source);
-    const t = String(e.target);
+    const s = resolveNodeId(e.source);
+    const t = resolveNodeId(e.target);
     adjacency[s] = adjacency[s] || [];
     adjacency[t] = adjacency[t] || [];
     adjacency[s].push(t);
@@ -251,14 +251,21 @@ export default function GraphPage() {
   const { data: papers = [], isPending: papersPending } = useDocuments();
   const graphQuery = useGraph(viewPaperId);
   const graphQueryData = graphQuery.data;
-  const graphData = useMemo(
-    () =>
-      (graphQueryData ?? { nodes: [], links: [] }) as {
-        nodes: GraphNode[];
-        links: GraphEdge[];
-      },
-    [graphQueryData]
-  );
+  const graphData = useMemo(() => {
+    const raw = (graphQueryData ?? { nodes: [], links: [] }) as {
+      nodes: GraphNode[];
+      links: GraphEdge[];
+    };
+    const nodeIds = new Set(raw.nodes.map((node) => node.id));
+    return {
+      nodes: raw.nodes,
+      links: raw.links.filter((link) => {
+        const sourceId = resolveNodeId(link.source);
+        const targetId = resolveNodeId(link.target);
+        return nodeIds.has(sourceId) && nodeIds.has(targetId);
+      }),
+    };
+  }, [graphQueryData]);
 
   // Size the canvas to its container so it fills the available width responsively
   // instead of a fixed 720px box with horizontal scroll.
@@ -284,11 +291,11 @@ export default function GraphPage() {
           })
           .map((node) => node.id)
       );
-      const links = graphData.links.filter((link) => visibleNodeIds.has(String(link.source)) || visibleNodeIds.has(String(link.target)));
+      const links = graphData.links.filter((link) => visibleNodeIds.has(resolveNodeId(link.source)) || visibleNodeIds.has(resolveNodeId(link.target)));
       const connectedIds = new Set<string>();
       links.forEach((link) => {
-        connectedIds.add(String(link.source));
-        connectedIds.add(String(link.target));
+        connectedIds.add(resolveNodeId(link.source));
+        connectedIds.add(resolveNodeId(link.target));
       });
       const nodes = graphData.nodes.filter((node) => connectedIds.has(node.id) || visibleNodeIds.has(node.id));
       return { nodes, links };
@@ -304,21 +311,25 @@ export default function GraphPage() {
   const nodeById = useMemo(() => new Map(positionedNodes.map((node) => [node.id, node])), [positionedNodes]);
   const selectedNode = positionedNodes.find((node) => node.id === selectedNodeId);
   const activeNodeId = hoveredNodeId ?? selectedNodeId;
-  const selectedPaper = papers.find((paper) => paper.title === selectedNode?.label);
+  const selectedPaper = papers.find((paper) => paper.id === selectedNode?.original_id || paper.title === selectedNode?.label);
   const connectedEdges = useMemo(
-    () => visibleGraph.links.filter((link) => String(link.source) === selectedNodeId || String(link.target) === selectedNodeId),
+    () => visibleGraph.links.filter((link) => resolveNodeId(link.source) === selectedNodeId || resolveNodeId(link.target) === selectedNodeId),
     [selectedNodeId, visibleGraph.links]
   );
   const forceGraphData = useMemo(
     () => ({
-      nodes: positionedNodes,
-      links: visibleGraph.links,
+      nodes: positionedNodes.map((node) => ({ ...node })),
+      links: visibleGraph.links.map((link) => ({
+        ...link,
+        source: resolveNodeId(link.source),
+        target: resolveNodeId(link.target),
+      })),
     }),
     [positionedNodes, visibleGraph.links]
   );
 
   const renderNode = (node: PositionedNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
-    const style = nodeStyles[node.kind];
+    const style = nodeStyles[node.kind] ?? nodeStyles.category;
     const isActive = activeNodeId === node.id;
     const radius = isActive ? style.radius + 5 : style.radius;
 
@@ -529,7 +540,7 @@ export default function GraphPage() {
                       <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-aubergine/35">Connected edges</div>
                       <ul className="space-y-2">
                         {connectedEdges.slice(0, 6).map((edge) => (
-                          <li key={`${edge.source}-${edge.target}-${edge.label}`} className="rounded-xl bg-cream-dark/25 px-3 py-2">
+                          <li key={`${resolveNodeId(edge.source)}-${resolveNodeId(edge.target)}-${edge.label}`} className="rounded-xl bg-cream-dark/25 px-3 py-2">
                             {formatEdgeLabel(edge.label)}
                           </li>
                         ))}

@@ -48,14 +48,20 @@ def get_graph_data() -> Dict[str, List[Dict[str, Any]]]:
         """
         nodes_result = Neo4jClient.execute_query(nodes_query)
 
-        # Lấy relationships giữa các nodes đã fetch
-        # Để đơn giản, lấy tối đa 500 edges
-        edges_query = """
-        MATCH (src)-[r]->(tgt)
-        RETURN id(src) AS source, id(tgt) AS target, type(r) AS label
-        LIMIT 500
-        """
-        edges_result = Neo4jClient.execute_query(edges_query)
+        node_ids = [int(row["internal_id"]) for row in nodes_result]
+
+        # Only return relationships whose endpoints are present in the node set.
+        # react-force-graph expects every link endpoint to resolve to a node.
+        if node_ids:
+            edges_query = """
+            MATCH (src)-[r]->(tgt)
+            WHERE id(src) IN $ids AND id(tgt) IN $ids
+            RETURN id(src) AS source, id(tgt) AS target, type(r) AS label
+            LIMIT 500
+            """
+            edges_result = Neo4jClient.execute_query(edges_query, {"ids": node_ids})
+        else:
+            edges_result = []
 
         # Format lại cho Frontend
         formatted_nodes = []
