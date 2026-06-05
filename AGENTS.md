@@ -34,11 +34,13 @@ Implemented:
 - Neo4j paper/author/entity graph writes.
 - LangGraph agent path for LLM-backed planning, retrieval, and synthesis.
 - Local retrieval fallback for chat when no external LLM is configured.
-- Next.js frontend for papers, upload, chat, and graph views.
+- Streaming chat endpoint with status, operational trace, token, source, and final events.
+- Document processing WebSocket events for queued/started/progress/completed/failed upload states.
+- Next.js frontend for papers, upload, full-screen chat, and graph views.
 
 Not implemented or intentionally limited:
 
-- Chat is REST POST, not WebSocket streaming.
+- Chat streaming uses newline-delimited JSON over HTTP rather than a chat WebSocket.
 - The validator loop mentioned in older docs is not implemented.
 - There is no Alembic migration tree; SQLAlchemy creates current tables at startup.
 - LLM quality depends on configuring Gemini, Groq, or Ollama. Without an LLM, chat returns an extractive local retrieval fallback.
@@ -156,11 +158,13 @@ Key settings:
 - `GET /health`: lightweight backend health.
 - `GET /health/full`: checks PostgreSQL and Neo4j.
 - `POST /api/v1/upload/`: upload PDF and start ingestion.
-- `GET /api/v1/documents`: list indexed/uploaded documents.
+- `GET /api/v1/documents`: list uploaded documents with processing/completed/failed status.
 - `GET /api/v1/files/{document_id}/pdf`: download original uploaded PDF.
 - `GET /api/v1/graph`: graph visualization data.
 - `GET /api/v1/graph/paper/{paper_id}`: subgraph around one paper.
 - `POST /api/v1/chat/`: ask a question.
+- `POST /api/v1/chat/stream`: stream status, trace, answer tokens, sources, and final answer as NDJSON.
+- `WS /api/v1/jobs/documents/{document_id}/events`: stream document processing job events.
 
 ## Verification Commands
 
@@ -216,7 +220,9 @@ curl -sS -X POST http://localhost:8000/api/v1/chat/ \
 
 ## Known Demo Behavior
 
-- Fresh uploads should appear as `processing` first, then `indexed` after ingestion completes.
+- Fresh uploads should appear as `processing` first, then `completed` after ingestion and Neo4j metadata writes complete.
+- Unprocessable PDFs should become `failed`/`Cannot process` and expose the processing error in the library.
+- Chat should expose operational trace and cited sources in the UI. Do not expose hidden chain-of-thought; show retrieval/planning/traversal/synthesis steps instead.
 - If no LLM key is configured, metadata extraction falls back to simple heuristics from the PDF text.
 - If no LLM key is configured, chat returns an answer that explicitly says it used local GraphRAG retrieval fallback.
 - Graph quality improves when LLM extraction is configured; without it, the graph may contain only paper/author metadata and heuristic entities.

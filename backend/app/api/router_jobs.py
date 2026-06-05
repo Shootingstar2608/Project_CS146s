@@ -50,8 +50,16 @@ async def document_job_events(websocket: WebSocket, document_id: str) -> None:
     client = redis.Redis.from_url(cfg.redis_url, decode_responses=True)
     pubsub = client.pubsub()
     try:
-        await websocket.send_json(await _document_snapshot(document_id))
+        await websocket.send_json({
+            "document_id": document_id,
+            "status": "processing",
+            "phase": "connected",
+            "message": "Connected to document processing events.",
+            "metadata": {},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
         await pubsub.subscribe(document_channel(document_id))
+        await websocket.send_json(await _document_snapshot(document_id))
         while True:
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=25)
             if not message:

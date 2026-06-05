@@ -16,7 +16,7 @@ export default function UploadPage() {
   const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isIndexing, setIsIndexing] = useState(false);
-  const [lastIndexedCount, setLastIndexedCount] = useState(0);
+  const [lastQueuedCount, setLastQueuedCount] = useState(0);
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
 
   const queryClient = useQueryClient();
@@ -75,7 +75,7 @@ export default function UploadPage() {
       }
     }
     
-    setLastIndexedCount(successCount);
+    setLastQueuedCount(successCount);
     setUploadErrors(errors);
     setQueuedFiles([]);
     setIsIndexing(false);
@@ -208,13 +208,13 @@ export default function UploadPage() {
               </div>
               <div className="rounded-2xl bg-cream-dark/30 p-4">
                 <div className="text-3xl font-extrabold text-aubergine">{indexedCount}</div>
-                <div className="text-xs font-bold uppercase tracking-wider text-aubergine/40">Indexed</div>
+                <div className="text-xs font-bold uppercase tracking-wider text-aubergine/40">Completed</div>
               </div>
             </div>
-            {lastIndexedCount > 0 && (
+            {lastQueuedCount > 0 && (
               <div className="mt-5 flex items-start gap-3 rounded-2xl bg-sage/25 p-4 text-sm text-aubergine/70">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#5E9A6B]" />
-                <span>{lastIndexedCount} file{lastIndexedCount === 1 ? "" : "s"} added to the library.</span>
+                <span>{lastQueuedCount} file{lastQueuedCount === 1 ? "" : "s"} queued for processing.</span>
               </div>
             )}
           </section>

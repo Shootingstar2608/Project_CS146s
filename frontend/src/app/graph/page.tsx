@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 type PositionedNode = GraphNode & {
   x: number;
   y: number;
+  fx?: number;
+  fy?: number;
 };
 
 type GraphEdge = {
@@ -23,6 +25,7 @@ type GraphEdge = {
 };
 
 type ForceGraphProps = {
+  ref?: React.Ref<ForceGraphApi>;
   graphData: { nodes: PositionedNode[]; links: GraphEdge[] };
   nodeId: string;
   nodeLabel: (node: PositionedNode) => string;
@@ -47,6 +50,10 @@ type ForceGraphProps = {
   onNodeHover: (node: PositionedNode | null) => void;
   onNodeClick: (node: PositionedNode) => void;
   onBackgroundClick: () => void;
+};
+
+type ForceGraphApi = {
+  zoomToFit: (durationMs?: number, padding?: number) => void;
 };
 
 const ForceGraph2D = dynamic(
@@ -80,6 +87,8 @@ const kindOrder: GraphNode["kind"][] = [
   "year",
   "category",
 ];
+
+const GRAPH_CANVAS_HEIGHT = 440;
 
 const kindAngles: Record<GraphNode["kind"], number> = {
   paper: 0,
@@ -248,8 +257,10 @@ function layoutGraph(
 
   return nodes.map((node) => ({
     ...node,
-    x: positions[node.id].x,
-    y: positions[node.id].y,
+    x: positions[node.id].x - centerX,
+    y: positions[node.id].y - centerY,
+    fx: positions[node.id].x - centerX,
+    fy: positions[node.id].y - centerY,
   }));
 }
 
@@ -269,7 +280,8 @@ export default function GraphPage() {
   const [hoveredNodeId, setHoveredNodeId] = useState<string>();
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 720, height: 520 });
+  const forceGraphRef = useRef<ForceGraphApi>(null);
+  const [dimensions, setDimensions] = useState({ width: 720, height: GRAPH_CANVAS_HEIGHT });
 
   const { data: papers = [], isPending: papersPending } = useDocuments();
   const graphQuery = useGraph(viewPaperId);
@@ -297,7 +309,7 @@ export default function GraphPage() {
     if (!element || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width ?? 720;
-      setDimensions({ width: Math.max(320, Math.floor(width)), height: 520 });
+      setDimensions({ width: Math.max(320, Math.floor(width)), height: GRAPH_CANVAS_HEIGHT });
     });
     observer.observe(element);
     return () => observer.disconnect();
@@ -352,6 +364,17 @@ export default function GraphPage() {
     [positionedNodes, visibleGraph.links]
   );
 
+  useEffect(() => {
+    if (graphQuery.isPending || forceGraphData.nodes.length === 0) return;
+    const fit = () => forceGraphRef.current?.zoomToFit(300, 72);
+    const frame = requestAnimationFrame(fit);
+    const later = window.setTimeout(fit, 700);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(later);
+    };
+  }, [dimensions.width, forceGraphData, graphQuery.isPending]);
+
   const renderNode = (node: PositionedNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const style = nodeStyles[node.kind] ?? nodeStyles.category;
     const isActive = activeNodeId === node.id;
@@ -375,7 +398,7 @@ export default function GraphPage() {
     if (showLabel) {
       const limit = isActive ? 42 : 28;
       const shortLabel = node.label.length > limit ? `${node.label.slice(0, limit)}...` : node.label;
-      const labelY = node.y > dimensions.height - 105 ? node.y - radius - 26 : node.y + radius + 26;
+      const labelY = node.y > dimensions.height / 2 - 105 ? node.y - radius - 26 : node.y + radius + 26;
       drawLabelBubble(ctx, shortLabel, node.x, labelY, isActive ? 10 : 8.5, globalScale, nodeMetaLine(node, paper));
     }
     ctx.restore();
@@ -478,20 +501,11 @@ export default function GraphPage() {
                     </option>
                   ))}
                 </select>
-                <span className="ml-2 rounded-lg bg-cream-dark/40 px-3 py-2 text-xs text-aubergine/55">Drag nodes, scroll to zoom</span>
-              </div>
-              <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wider text-aubergine/45">
-                {kindOrder.map((kind) => (
-                  <span key={kind} className="flex items-center gap-2 rounded-full bg-cream-dark/35 px-3 py-1">
-                    <span className={cn("h-2 w-2 rounded-full", kind === "author" && "bg-lilac", kind === "organization" && "bg-amber-400", kind === "conference" && "bg-sky", kind === "topic" && "bg-sage", kind === "task" && "bg-yellow-600", kind === "methodology" && "bg-rose-400", kind === "dataset" && "bg-emerald-500", kind === "result" && "bg-slate-400", kind === "year" && "bg-sky-500", kind === "category" && "bg-sage")}></span>
-                    {prettyKind(kind)}
-                  </span>
-                ))}
               </div>
             </div>
 
             <div ref={canvasContainerRef} className="relative bg-cream-light/40">
-              <div className="h-[520px] w-full">
+              <div className="relative h-[440px] w-full">
                 {graphQuery.isError ? (
                   <div className="flex h-full items-center justify-center p-6">
                     <ErrorState
@@ -501,6 +515,7 @@ export default function GraphPage() {
                   </div>
                 ) : (
                 <ForceGraph2D
+                  ref={forceGraphRef}
                   graphData={forceGraphData}
                   nodeId="id"
                   nodeLabel={(node) => node.label}
@@ -537,6 +552,17 @@ export default function GraphPage() {
                     <Spinner className="h-7 w-7" />
                   </div>
                 )}
+                <div className="pointer-events-none absolute left-4 top-4 rounded-xl bg-surface/85 px-3 py-2 text-xs text-aubergine/55 shadow-soft backdrop-blur">
+                  Drag nodes, scroll to zoom
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 border-t border-aubergine/5 bg-surface/85 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-aubergine/45">
+                {kindOrder.map((kind) => (
+                  <span key={kind} className="flex items-center gap-1.5 rounded-full bg-cream-dark/35 px-3 py-1">
+                    <span className={cn("h-2 w-2 rounded-full", kind === "author" && "bg-lilac", kind === "organization" && "bg-amber-400", kind === "conference" && "bg-sky", kind === "topic" && "bg-sage", kind === "task" && "bg-yellow-600", kind === "methodology" && "bg-rose-400", kind === "dataset" && "bg-emerald-500", kind === "result" && "bg-slate-400", kind === "year" && "bg-sky-500", kind === "category" && "bg-sage")} />
+                    {prettyKind(kind)}
+                  </span>
+                ))}
               </div>
             </div>
           </section>
