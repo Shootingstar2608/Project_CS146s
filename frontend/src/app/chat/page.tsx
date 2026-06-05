@@ -4,7 +4,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { PanelLeft, PanelRight, Plus, Sparkles } from "lucide-react";
-import { BackendPaper, getErrorMessage, sendMessage as sendBackendMessage, uploadDocument } from "@/lib/api";
+import { BackendPaper, getErrorMessage, streamMessage, uploadDocument } from "@/lib/api";
 import { queryKeys, useDocuments } from "@/lib/queries";
 import { useResearchStore } from "@/lib/research-store";
 import ChatComposer from "@/components/chat/ChatComposer";
@@ -39,6 +39,8 @@ export default function ChatPage() {
   const deleteSession = useResearchStore((state) => state.deleteSession);
   const appendUserMessage = useResearchStore((state) => state.appendUserMessage);
   const appendAssistantMessage = useResearchStore((state) => state.appendAssistantMessage);
+  const appendAssistantPlaceholder = useResearchStore((state) => state.appendAssistantPlaceholder);
+  const updateAssistantMessage = useResearchStore((state) => state.updateAssistantMessage);
 
   const { data: papers = [] } = useDocuments();
 
@@ -50,21 +52,22 @@ export default function ChatPage() {
   const [showInspector, setShowInspector] = useState(false);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("sources");
   const [selectedMessageId, setSelectedMessageId] = useState<string>();
+  const [activeStatus, setActiveStatus] = useState("Ready");
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
   const messages = useMemo(() => activeSession?.messages ?? [], [activeSession]);
   const isEmpty = messages.length === 0;
-
-  // Keep the latest message (and the typing indicator) in view.
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length, isSending]);
 
   // The answer whose sources/trace the inspector shows (defaults to the latest answer).
   const latestAssistant = useMemo(
     () => [...messages].reverse().find((message) => message.role === "assistant"),
     [messages]
   );
+
+  // Keep the latest message (and the typing indicator) in view.
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, isSending, latestAssistant?.content]);
   const selectedMessage = messages.find((message) => message.id === selectedMessageId) ?? latestAssistant;
   const inspectorSourcePapers = resolveSourcePapers(papers, selectedMessage?.sourcePaperIds ?? []);
   const inspectorReasoning = selectedMessage?.reasoningSteps ?? [];
@@ -80,20 +83,73 @@ export default function ChatPage() {
     setIsSending(true);
     // Show the user's message immediately (optimistic), then await the answer.
     appendUserMessage(message);
+    const assistantId = appendAssistantPlaceholder({
+      content: "",
+      sourcePaperIds: [],
+      reasoningSteps: ["Queued chat request."],
+    });
+    let streamedAnswer = "";
+    let traceSteps = ["Queued chat request."];
     try {
-      const response = await sendBackendMessage(message, activeSessionId);
-      appendAssistantMessage({
-        content: response.answer || "No answer returned.",
-        sourcePaperIds: response.sources || [],
-        reasoningSteps: response.reasoning_steps || [],
+      await streamMessage(message, activeSessionId, {
+        onEvent: (event) => {
+          if (!assistantId) return;
+          if (event.type === "status") {
+            setActiveStatus(`${event.label}: ${event.message}`);
+            traceSteps = [...traceSteps, `${event.label}: ${event.message}`];
+            updateAssistantMessage(assistantId, {
+              reasoningSteps: traceSteps,
+            });
+          }
+          if (event.type === "trace") {
+            traceSteps = event.steps;
+            updateAssistantMessage(assistantId, { reasoningSteps: event.steps });
+          }
+          if (event.type === "token") {
+            streamedAnswer += event.content;
+            updateAssistantMessage(assistantId, { content: streamedAnswer });
+          }
+          if (event.type === "sources") {
+            updateAssistantMessage(assistantId, {
+              sourcePaperIds: event.sources,
+              reasoningSteps: event.reasoning_steps,
+            });
+            setSelectedMessageId(assistantId);
+          }
+          if (event.type === "final") {
+            streamedAnswer = event.answer || streamedAnswer;
+            updateAssistantMessage(assistantId, {
+              content: streamedAnswer || "No answer returned.",
+              sourcePaperIds: event.sources || [],
+              reasoningSteps: event.reasoning_steps || [],
+            });
+            setActiveStatus("Answer complete");
+          }
+          if (event.type === "error") {
+            updateAssistantMessage(assistantId, {
+              content: `Chat backend error: ${event.message}`,
+              sourcePaperIds: [],
+              reasoningSteps: event.reasoning_steps ?? ["Backend chat request failed"],
+            });
+            setError(event.message);
+          }
+        },
       });
     } catch (err: unknown) {
       const detail = getErrorMessage(err, "Backend chat request failed.");
-      appendAssistantMessage({
-        content: `Chat backend error: ${detail}`,
-        sourcePaperIds: [],
-        reasoningSteps: ["Backend chat request failed"],
-      });
+      if (assistantId) {
+        updateAssistantMessage(assistantId, {
+          content: `Chat backend error: ${detail}`,
+          sourcePaperIds: [],
+          reasoningSteps: ["Backend chat request failed"],
+        });
+      } else {
+        appendAssistantMessage({
+          content: `Chat backend error: ${detail}`,
+          sourcePaperIds: [],
+          reasoningSteps: ["Backend chat request failed"],
+        });
+      }
       setError(detail);
     } finally {
       setIsSending(false);
@@ -153,7 +209,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="relative flex h-[calc(100vh-140px)] min-h-[520px] flex-col overflow-hidden rounded-[28px] bg-surface shadow-soft">
+    <div className="relative -m-4 flex h-[calc(100vh-60px)] min-h-[640px] flex-col overflow-hidden bg-surface sm:-m-6 lg:-m-10">
       {/* Header */}
       <header className="flex items-center justify-between gap-3 border-b border-aubergine/5 px-3 py-2.5 sm:px-4">
         <div className="flex items-center gap-1">
@@ -177,9 +233,10 @@ export default function ChatPage() {
             <Plus className="h-5 w-5" />
           </button>
         </div>
-        <h1 className="min-w-0 flex-1 truncate text-center text-sm font-bold text-aubergine">
-          {activeSession?.title ?? "New chat"}
-        </h1>
+        <div className="min-w-0 flex-1 text-center">
+          <h1 className="truncate text-sm font-bold text-aubergine">{activeSession?.title ?? "New chat"}</h1>
+          <p className="truncate text-[11px] text-aubergine/40">{isSending ? activeStatus : "Sources and trace update live while the answer streams."}</p>
+        </div>
         <div className="flex items-center gap-2">
           <span className="hidden items-center gap-1.5 rounded-full bg-cream-dark/30 px-3 py-1 text-[10px] font-mono text-aubergine/60 sm:flex">
             <span className="h-1.5 w-1.5 rounded-full bg-sage" />
@@ -201,7 +258,7 @@ export default function ChatPage() {
       {/* Messages / empty state */}
       <div className="flex-1 overflow-y-auto">
         {isEmpty ? (
-          <div className="mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center px-4 text-center">
+          <div className="mx-auto flex h-full w-full max-w-4xl flex-col items-center justify-center px-4 text-center">
             <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-terracotta/10 text-terracotta">
               <Sparkles className="h-7 w-7" />
             </div>
@@ -209,7 +266,7 @@ export default function ChatPage() {
               What do you want to research?
             </h2>
             <p className="mt-3 max-w-md text-sm leading-6 text-aubergine/55">
-              Questions run through the GraphRAG agent and cite your indexed papers when the graph has matching context.
+              Questions stream through the GraphRAG agent with visible retrieval, graph traversal, sources, and trace.
             </p>
             <div className="mt-7 w-full">
               <ChatComposer variant="hero" autoFocus placeholder="Ask anything about your papers…" {...composerProps} />
@@ -229,7 +286,7 @@ export default function ChatPage() {
             {error && <p className="mt-4 text-xs font-medium text-terracotta">{error}</p>}
           </div>
         ) : (
-          <div className="mx-auto w-full max-w-3xl px-4 py-6">
+          <div className="mx-auto w-full max-w-4xl px-4 py-8">
             <div className="flex flex-col gap-7">
               {messages.map((message) => (
                 <ChatMessage
@@ -241,17 +298,13 @@ export default function ChatPage() {
                 />
               ))}
               {isSending && (
-                <div className="flex gap-3">
+                <div className="flex gap-3 rounded-2xl border border-aubergine/8 bg-cream-dark/15 p-4">
                   <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-terracotta/10 text-terracotta">
                     <Sparkles className="h-4 w-4" />
                   </div>
-                  <div className="flex items-center gap-3 rounded-[20px] bg-cream-dark/15 px-4 py-3 text-sm text-aubergine/60">
-                    <span className="flex gap-1" aria-hidden>
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-terracotta/60 [animation-delay:-0.2s] motion-reduce:animate-none" />
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-terracotta/60 [animation-delay:-0.1s] motion-reduce:animate-none" />
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-terracotta/60 motion-reduce:animate-none" />
-                    </span>
-                    <span>Searching the knowledge graph…</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold uppercase tracking-wider text-terracotta">Agent activity</div>
+                    <div className="mt-1 text-sm text-aubergine/65">{activeStatus}</div>
                   </div>
                 </div>
               )}
@@ -263,8 +316,8 @@ export default function ChatPage() {
 
       {/* Docked composer (active conversation) */}
       {!isEmpty && (
-        <div className="border-t border-aubergine/5 bg-surface/80 px-4 py-3 backdrop-blur">
-          <div className="mx-auto w-full max-w-3xl">
+        <div className="border-t border-aubergine/5 bg-surface/90 px-4 py-3 backdrop-blur">
+          <div className="mx-auto w-full max-w-4xl">
             <ChatComposer variant="docked" autoFocus {...composerProps} />
             {error && <p className="mt-2 text-xs font-medium text-terracotta">{error}</p>}
             <p className="mt-2 text-center text-[11px] text-aubergine/35">

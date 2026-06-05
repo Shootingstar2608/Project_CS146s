@@ -1,9 +1,15 @@
 import logging
+import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from agent.graph import run_agent
+from agent.nodes.planner import plan_steps
+from agent.nodes.retriever import retrieve_from_graph
+from agent.nodes.synthesizer import ANSWER_STREAM_PROMPT, build_synthesis_input
 from app.models.schemas import ChatRequest, ChatResponse
 from app.security.prompt_guard import PromptGuard
 
@@ -13,6 +19,16 @@ router = APIRouter(
     prefix="/chat",
     tags=["Chat Endpoint"]
 )
+
+
+def _extract_sources(graph_data: dict) -> list[str]:
+    sources_list = []
+    if graph_data and isinstance(graph_data, dict):
+        nodes = graph_data.get("nodes", [])
+        for node in nodes:
+            if node.get("type") == "Paper" and node.get("id"):
+                sources_list.append(str(node["id"]))
+    return list(dict.fromkeys(sources_list))
 
 @router.post("/", response_model=ChatResponse)
 async def process_chat(request: ChatRequest) -> Any:
@@ -31,18 +47,11 @@ async def process_chat(request: ChatRequest) -> Any:
             top_k=top_k
         )
         
-        # Extract sources from graph data nodes if available
-        sources_list = []
         graph_data = result.get("graph_data", {})
-        if graph_data and isinstance(graph_data, dict):
-            nodes = graph_data.get("nodes", [])
-            for node in nodes:
-                if node.get("type") == "Paper" and node.get("id"):
-                    sources_list.append(str(node["id"]))
 
         return ChatResponse(
             answer=result.get("answer", "Xin lỗi, tôi không thể trả lời câu hỏi này."),
-            sources=sources_list,
+            sources=_extract_sources(graph_data),
             reasoning_steps=result.get("reasoning_steps", []),
             graph_data=graph_data
         )
@@ -50,3 +59,104 @@ async def process_chat(request: ChatRequest) -> Any:
     except Exception as e:
         logger.error(f"Lỗi trong quá trình xử lý Chat: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Lỗi máy chủ nội bộ: {str(e)}")
+
+
+def _event(event_type: str, payload: dict[str, Any]) -> str:
+    return json.dumps({"type": event_type, **payload}, ensure_ascii=False) + "\n"
+
+
+@router.post("/stream")
+async def stream_chat(request: ChatRequest) -> StreamingResponse:
+    """Stream transparent GraphRAG progress and answer tokens as NDJSON."""
+    safe_message = PromptGuard.verify_and_clean(request.message)
+    alpha_override = getattr(request, "alpha", None)
+    top_k = getattr(request, "top_k", 5)
+
+    async def generate():
+        state = {
+            "messages": [],
+            "user_query": safe_message,
+            "plan": [],
+            "current_step": 0,
+            "retrieved_context": [],
+            "final_answer": "",
+            "graph_data": {"nodes": [], "edges": []},
+            "needs_more_info": False,
+            "alpha": alpha_override if alpha_override is not None else 0.5,
+            "top_k": top_k,
+        }
+        trace: list[str] = []
+        answer_parts: list[str] = []
+        graph_data: dict[str, Any] = {"nodes": [], "edges": []}
+
+        try:
+            trace.append("Planning retrieval steps.")
+            yield _event("status", {"label": "Planning", "message": "Planning retrieval steps."})
+            plan_update = plan_steps(state)
+            state.update(plan_update)
+            trace.extend([f"Plan: {step}" for step in state.get("plan", [])])
+            yield _event("trace", {"steps": trace})
+
+            while state.get("current_step", 0) < len(state.get("plan", [])):
+                step_index = int(state.get("current_step", 0))
+                step = state["plan"][step_index]
+                yield _event("status", {"label": "Traversing graph", "message": step})
+                before_count = len(state.get("retrieved_context", []))
+                retrieve_update = retrieve_from_graph(state)
+                state.update(retrieve_update)
+                context = state.get("retrieved_context", [])
+                latest = context[-1] if len(context) > before_count else {}
+                kg_count = len(latest.get("kg_results") or [])
+                vector_count = len(latest.get("vector_results") or [])
+                trace.append(f"Retrieved {kg_count} graph records and {vector_count} vector chunks for: {step}")
+                yield _event("trace", {"steps": trace})
+
+            yield _event("status", {"label": "Synthesizing", "message": "Writing the answer from retrieved sources."})
+            from backend.app.core.llm_client import get_llm
+
+            llm = get_llm()
+            _, human_text = build_synthesis_input(state)
+            for chunk in llm.stream([
+                SystemMessage(content=ANSWER_STREAM_PROMPT),
+                HumanMessage(content=human_text),
+            ]):
+                token = getattr(chunk, "content", "") or ""
+                if token:
+                    answer_parts.append(token)
+                    yield _event("token", {"content": token})
+
+            yield _event("status", {"label": "Citing sources", "message": "Preparing sources and graph trace."})
+            try:
+                from agent.nodes.synthesizer import synthesize_answer
+
+                structured = synthesize_answer({**state, "final_answer": "".join(answer_parts)})
+                graph_data = structured.get("graph_data", {}) or {"nodes": [], "edges": []}
+            except Exception:
+                graph_data = {"nodes": [], "edges": []}
+
+            sources = _extract_sources(graph_data)
+            if not sources:
+                # Fall back to vector chunk paper ids/titles when JSON graph output omits Paper nodes.
+                for item in state.get("retrieved_context", []):
+                    for chunk in item.get("vector_results", []):
+                        ref = chunk.get("paper_id") or chunk.get("title")
+                        if ref:
+                            sources.append(str(ref))
+                sources = list(dict.fromkeys(sources))
+
+            trace.append(f"Prepared {len(sources)} cited source reference{'' if len(sources) == 1 else 's'}.")
+            yield _event("sources", {"sources": sources, "graph_data": graph_data, "reasoning_steps": trace})
+            yield _event(
+                "final",
+                {
+                    "answer": "".join(answer_parts),
+                    "sources": sources,
+                    "reasoning_steps": trace,
+                    "graph_data": graph_data,
+                },
+            )
+        except Exception as exc:
+            logger.exception("Streaming chat failed")
+            yield _event("error", {"message": str(exc), "reasoning_steps": trace})
+
+    return StreamingResponse(generate(), media_type="application/x-ndjson")

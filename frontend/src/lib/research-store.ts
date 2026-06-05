@@ -105,6 +105,15 @@ type ResearchState = {
     sourcePaperIds: string[];
     reasoningSteps?: string[];
   }) => void;
+  appendAssistantPlaceholder: (answer?: {
+    content?: string;
+    sourcePaperIds?: string[];
+    reasoningSteps?: string[];
+  }) => string | undefined;
+  updateAssistantMessage: (
+    messageId: string,
+    updates: Partial<Pick<ChatMessage, "content" | "sourcePaperIds" | "reasoningSteps">>
+  ) => void;
   clearWorkspace: () => void;
 };
 
@@ -453,6 +462,51 @@ export const useResearchStore = create<ResearchState>()(
               : session
           ),
         });
+      },
+      appendAssistantPlaceholder: (answer = {}) => {
+        const state = get();
+        const activeSessionId = state.activeSessionId;
+        if (!activeSessionId) return undefined;
+
+        const now = new Date().toISOString();
+        const messageId = makeId("message");
+        const assistantMessage: ChatMessage = {
+          id: messageId,
+          role: "assistant",
+          content: answer.content ?? "",
+          createdAt: now,
+          sourcePaperIds: answer.sourcePaperIds ?? [],
+          reasoningSteps: answer.reasoningSteps ?? [],
+        };
+
+        set({
+          sessions: state.sessions.map((session) =>
+            session.id === activeSessionId
+              ? { ...session, updatedAt: now, messages: [...session.messages, assistantMessage] }
+              : session
+          ),
+        });
+        return messageId;
+      },
+      updateAssistantMessage: (messageId, updates) => {
+        const now = new Date().toISOString();
+        set((state) => ({
+          sessions: state.sessions.map((session) => ({
+            ...session,
+            updatedAt: session.messages.some((message) => message.id === messageId) ? now : session.updatedAt,
+            messages: session.messages.map((message) =>
+              message.id === messageId && message.role === "assistant"
+                ? {
+                    ...message,
+                    ...updates,
+                    content: updates.content ?? message.content,
+                    sourcePaperIds: updates.sourcePaperIds ?? message.sourcePaperIds,
+                    reasoningSteps: updates.reasoningSteps ?? message.reasoningSteps,
+                  }
+                : message
+            ),
+          })),
+        }));
       },
       clearWorkspace: () => set({ papers: [], sessions: [], activeSessionId: undefined }),
     }),

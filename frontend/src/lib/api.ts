@@ -90,4 +90,50 @@ export const sendMessage = async (message: string, sessionId?: string, topK = 5)
   return response.data;
 };
 
+export type ChatStreamEvent =
+  | { type: "status"; label: string; message: string }
+  | { type: "trace"; steps: string[] }
+  | { type: "token"; content: string }
+  | { type: "sources"; sources: string[]; reasoning_steps: string[]; graph_data?: Record<string, unknown> }
+  | { type: "final"; answer: string; sources: string[]; reasoning_steps: string[]; graph_data?: Record<string, unknown> }
+  | { type: "error"; message: string; reasoning_steps?: string[] };
+
+export async function streamMessage(
+  message: string,
+  sessionId: string | undefined,
+  handlers: {
+    onEvent: (event: ChatStreamEvent) => void;
+    signal?: AbortSignal;
+    topK?: number;
+  }
+) {
+  const response = await fetch(`${apiBaseUrl}/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, session_id: sessionId, top_k: handlers.topK ?? 5 }),
+    signal: handlers.signal,
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`Chat stream failed (${response.status})`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      handlers.onEvent(JSON.parse(line) as ChatStreamEvent);
+    }
+  }
+  if (buffer.trim()) {
+    handlers.onEvent(JSON.parse(buffer) as ChatStreamEvent);
+  }
+}
+
 export default api;

@@ -49,7 +49,14 @@ export default function ChatMessage({ message, sourceCount, onOpenSources, onOpe
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-aubergine">
-          <Markdown>{message.content}</Markdown>
+          {message.content ? (
+            <Markdown>{message.content}</Markdown>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-aubergine/45">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-terracotta" />
+              Preparing the answer...
+            </div>
+          )}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button type="button" onClick={copy} aria-label="Copy answer" className={chipClass}>

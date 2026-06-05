@@ -32,6 +32,29 @@ BẮT BUỘC trả về ĐÚNG định dạng JSON sau (không bọc trong markd
     }
 }"""
 
+ANSWER_STREAM_PROMPT = """Bạn là trợ lý nghiên cứu khoa học của hệ thống GraphRAG.
+
+Dựa trên Context được cung cấp, hãy trả lời câu hỏi của người dùng bằng Markdown.
+
+LUẬT:
+1. Trả lời bằng tiếng Việt.
+2. Chỉ dùng Context được cung cấp; nếu thiếu thông tin, nói rõ tài liệu không đề cập.
+3. Nêu tên paper hoặc entity cụ thể khi có.
+4. Không trả về JSON trong câu trả lời này."""
+
+
+def build_synthesis_input(state: AgentState) -> tuple[str, str]:
+    context = state.get("retrieved_context", [])
+    plan = state.get("plan", [])
+    context_text = json.dumps(context, ensure_ascii=False, indent=2, default=str)
+    plan_text = "\n".join(f"  {i+1}. {s}" for i, s in enumerate(plan))
+    human_text = (
+        f"Câu hỏi: {state['user_query']}\n\n"
+        f"Kế hoạch đã thực hiện:\n{plan_text}\n\n"
+        f"Context thu thập được từ Knowledge Graph:\n{context_text}"
+    )
+    return context_text, human_text
+
 
 def synthesize_answer(state: AgentState) -> dict:
     """Node: Tổng hợp context → câu trả lời + graph_data để visualize."""
@@ -39,18 +62,11 @@ def synthesize_answer(state: AgentState) -> dict:
 
     llm = get_json_llm()
 
-    context = state.get("retrieved_context", [])
-    plan = state.get("plan", [])
-    context_text = json.dumps(context, ensure_ascii=False, indent=2, default=str)
-    plan_text = "\n".join(f"  {i+1}. {s}" for i, s in enumerate(plan))
+    _, human_text = build_synthesis_input(state)
 
     response = llm.invoke([
         SystemMessage(content=SYNTHESIS_PROMPT),
-        HumanMessage(content=(
-            f"Câu hỏi: {state['user_query']}\n\n"
-            f"Kế hoạch đã thực hiện:\n{plan_text}\n\n"
-            f"Context thu thập được từ Knowledge Graph:\n{context_text}"
-        )),
+        HumanMessage(content=human_text),
     ])
 
     # Parse JSON response với fallback an toàn
