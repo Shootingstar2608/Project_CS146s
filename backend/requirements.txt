@@ -30,6 +30,7 @@ langgraph-checkpoint==2.1.2
 langgraph-prebuilt==0.1.8
 langgraph-sdk==0.1.74
 langchain-groq==0.3.1
+langchain-google-genai==2.1.5
 langchain-community==0.3.14
 instructor==1.7.2
 

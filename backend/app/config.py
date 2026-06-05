@@ -14,7 +14,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     # ── LLM Provider ──────────────────────────────────────────────────────────
     groq_api_key: str = ""
-    llm_provider: str = "groq"          # "groq" | "ollama"
+    gemini_api_key: str = ""
+    llm_provider: str = "groq"          # "groq" | "ollama" | "gemini"
     llm_model: str = "llama-3.3-70b-versatile"
 
     # Ollama (fallback local)

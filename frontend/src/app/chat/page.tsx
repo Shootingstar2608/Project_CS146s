@@ -4,7 +4,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { PanelLeft, PanelRight, Plus, Sparkles } from "lucide-react";
-import { getErrorMessage, sendMessage as sendBackendMessage, uploadDocument } from "@/lib/api";
+import { BackendPaper, getErrorMessage, sendMessage as sendBackendMessage, uploadDocument } from "@/lib/api";
 import { queryKeys, useDocuments } from "@/lib/queries";
 import { useResearchStore } from "@/lib/research-store";
 import ChatComposer from "@/components/chat/ChatComposer";
@@ -14,6 +14,18 @@ import SessionsDrawer from "@/components/chat/SessionsDrawer";
 import SuggestionChips from "@/components/chat/SuggestionChips";
 
 type InspectorTab = "sources" | "trace";
+
+function normalizeSourceRef(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function resolveSourcePapers(papers: BackendPaper[], sourceRefs: string[]) {
+  if (sourceRefs.length === 0) return [];
+  const normalizedRefs = new Set(sourceRefs.map(normalizeSourceRef));
+  return papers.filter((paper) =>
+    [paper.id, paper.title, paper.fileName].some((value) => normalizedRefs.has(normalizeSourceRef(value)))
+  );
+}
 
 export default function ChatPage() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -54,11 +66,11 @@ export default function ChatPage() {
     [messages]
   );
   const selectedMessage = messages.find((message) => message.id === selectedMessageId) ?? latestAssistant;
-  const inspectorSourcePapers = papers.filter((paper) => selectedMessage?.sourcePaperIds.includes(paper.id));
+  const inspectorSourcePapers = resolveSourcePapers(papers, selectedMessage?.sourcePaperIds ?? []);
   const inspectorReasoning = selectedMessage?.reasoningSteps ?? [];
 
   const sourceCountFor = (sourcePaperIds: string[]) =>
-    papers.filter((paper) => sourcePaperIds.includes(paper.id)).length;
+    resolveSourcePapers(papers, sourcePaperIds).length;
 
   const handleSend = async () => {
     const message = draft.trim();

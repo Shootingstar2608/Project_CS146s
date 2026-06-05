@@ -33,7 +33,7 @@ Implemented:
 - Optional SentenceTransformer embedder if installed and configured.
 - Neo4j paper/author/entity graph writes.
 - LangGraph agent path for LLM-backed planning, retrieval, and synthesis.
-- Local retrieval fallback for chat when no Groq/Ollama LLM is configured.
+- Local retrieval fallback for chat when no external LLM is configured.
 - Next.js frontend for papers, upload, chat, and graph views.
 
 Not implemented or intentionally limited:
@@ -41,7 +41,7 @@ Not implemented or intentionally limited:
 - Chat is REST POST, not WebSocket streaming.
 - The validator loop mentioned in older docs is not implemented.
 - There is no Alembic migration tree; SQLAlchemy creates current tables at startup.
-- LLM quality depends on configuring Groq or Ollama. Without an LLM, chat returns an extractive local retrieval fallback.
+- LLM quality depends on configuring Gemini, Groq, or Ollama. Without an LLM, chat returns an extractive local retrieval fallback.
 - Presidio and slowapi are not part of the current runtime despite older README wording.
 
 ## Architecture
@@ -90,7 +90,7 @@ Agent
 - `backend/app/api/router_files.py`: PDF download endpoint.
 - `backend/app/core/database.py`: PostgreSQL setup.
 - `backend/app/core/neo4j_client.py`: Neo4j query helpers.
-- `backend/app/core/llm_client.py`: Groq/Ollama LangChain model factory.
+- `backend/app/core/llm_client.py`: Gemini/Groq/Ollama LangChain model factory.
 - `backend/app/workers/celery_app.py`: Celery app and ingestion task.
 - `pipeline/embedding/ingest.py`: main PDF ingestion orchestrator.
 - `pipeline/embedding/embedder.py`: hashing and optional SentenceTransformer embedders.
@@ -143,6 +143,7 @@ Copy `.env.example` to `.env` for local configuration.
 
 Key settings:
 
+- `LLM_PROVIDER=gemini` with `GEMINI_API_KEY=...` for Gemini. Prefer `LLM_MODEL=gemini-2.5-flash` for the default demo balance of latency, cost, and quality.
 - `LLM_PROVIDER=groq` with `GROQ_API_KEY=...` for Groq.
 - `LLM_PROVIDER=ollama`, `OLLAMA_BASE_URL=...`, and `LLM_MODEL=...` for local Ollama.
 - If no LLM is configured, chat should still return a local retrieval fallback instead of failing.

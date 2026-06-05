@@ -72,6 +72,15 @@ def extract_paper_metadata(text: str, llm=None) -> PaperMetadata:
         ])
         raw = response.content.strip()
         data = _extract_json_payload(raw)
+        for field in ("title", "abstract", "venue", "doi"):
+            if data.get(field) is None:
+                data[field] = ""
+        if not data.get("title"):
+            data["title"] = "Unknown"
+        if data.get("authors") is None:
+            data["authors"] = []
+        if data.get("keywords") is None:
+            data["keywords"] = []
         return PaperMetadata.model_validate(data)
     except Exception as e:
         logger.error(f"Error in extract_paper_metadata: {e}")

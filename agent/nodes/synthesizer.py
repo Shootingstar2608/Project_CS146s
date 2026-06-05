@@ -35,9 +35,9 @@ BẮT BUỘC trả về ĐÚNG định dạng JSON sau (không bọc trong markd
 
 def synthesize_answer(state: AgentState) -> dict:
     """Node: Tổng hợp context → câu trả lời + graph_data để visualize."""
-    from backend.app.core.llm_client import get_llm
+    from backend.app.core.llm_client import get_json_llm
 
-    llm = get_llm().bind(response_format={"type": "json_object"})
+    llm = get_json_llm()
 
     context = state.get("retrieved_context", [])
     plan = state.get("plan", [])

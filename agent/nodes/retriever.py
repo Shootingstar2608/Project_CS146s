@@ -2,6 +2,8 @@
 Agent Node: Retriever — Query Neo4j Knowledge Graph lấy context.
 """
 
+import re
+
 from langchain_core.messages import SystemMessage, HumanMessage
 from agent.state import AgentState
 
@@ -39,6 +41,7 @@ def retrieve_from_graph(state: AgentState) -> dict:
     ])
 
     cypher = response.content.strip().replace("```cypher", "").replace("```", "").strip()
+    cypher = re.sub(r'\."([^"`]+)"', r'.`\1`', cypher)
 
     context = []
     records = []
@@ -50,7 +53,7 @@ def retrieve_from_graph(state: AgentState) -> dict:
     vector_results = []
     try:
         from pipeline.retrieval.vector_retriever import retrieve_chunks
-        vector_results = retrieve_chunks(step, top_k=top_k)
+        vector_results = retrieve_chunks(step, top_k=top_k, refresh=True)
     except Exception as e:
         vector_results = []
         records.append({"vector_error": str(e)})

@@ -163,21 +163,24 @@ def _safe_extract_metadata(full_text: str, fallback_title: str = "Unknown") -> d
     """
     Try LLM metadata extraction; fall back to deterministic text heuristics.
     """
+    heuristic_meta = _heuristic_extract_metadata(full_text, fallback_title)
     try:
         from pipeline.extraction.entity_extractor import extract_paper_metadata
         meta = extract_paper_metadata(full_text)
         logger.info("[ingest] Extracted metadata: %s", meta)
+        if not meta.title or meta.title.strip().casefold() == "unknown":
+            return heuristic_meta
         return {
             "title": meta.title,
-            "authors": meta.authors,
-            "year": meta.year,
+            "authors": meta.authors or heuristic_meta["authors"],
+            "year": meta.year or heuristic_meta["year"],
             "categories": [c.value for c in meta.categories] if meta.categories else ["Uncategorized"],
-            "abstract": meta.abstract,
-            "keywords": getattr(meta, "keywords", []),
+            "abstract": meta.abstract or heuristic_meta["abstract"],
+            "keywords": getattr(meta, "keywords", []) or heuristic_meta["keywords"],
         }
     except Exception as exc:
         logger.warning("[ingest] Metadata extraction failed: %s", exc)
-        return _heuristic_extract_metadata(full_text, fallback_title)
+        return heuristic_meta
 
 
 def _heuristic_extract_metadata(full_text: str, fallback_title: str) -> dict:

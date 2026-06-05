@@ -5,7 +5,9 @@ Sử dụng với `instructor` để ép LLM trả JSON chuẩn.
 Đã cập nhật theo schema_sample.md: 9 Node types, UUID IDs, aliases, edge properties.
 """
 
-from pydantic import BaseModel, Field
+import re
+
+from pydantic import BaseModel, Field, field_validator
 from uuid import uuid4
 from enum import Enum
 
@@ -88,6 +90,20 @@ class Relation(BaseModel):
     evidence: str = Field(default="", description="Trích dẫn câu gốc làm bằng chứng")
     # Edge properties
     properties: dict = Field(default_factory=dict, description="Thuộc tính bổ sung trên edge (VD: role, relevance)")
+
+    @field_validator("properties", mode="before")
+    @classmethod
+    def normalize_properties(cls, value):
+        if value is None:
+            return {}
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            match = re.match(r"^\s*([A-Za-z_][\w-]*)\s*=\s*(.+?)\s*$", value)
+            if match:
+                return {match.group(1): match.group(2)}
+            return {"value": value}
+        return {}
 
 
 # ══════════════════════════════════════════════════════════════
