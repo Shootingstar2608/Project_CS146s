@@ -54,6 +54,7 @@ type ForceGraphProps = {
 
 type ForceGraphApi = {
   zoomToFit: (durationMs?: number, padding?: number) => void;
+  d3Force: (forceName: string, forceFn?: any) => any;
 };
 
 const ForceGraph2D = dynamic(
@@ -259,8 +260,7 @@ function layoutGraph(
     ...node,
     x: positions[node.id].x - centerX,
     y: positions[node.id].y - centerY,
-    fx: positions[node.id].x - centerX,
-    fy: positions[node.id].y - centerY,
+    // Provide initial positions, but do not set fx/fy so the physics engine can spread them out dynamically.
   }));
 }
 
@@ -303,16 +303,28 @@ export default function GraphPage() {
   }, [graphQueryData]);
 
   // Size the canvas to its container so it fills the available width responsively
-  // instead of a fixed 720px box with horizontal scroll.
   useEffect(() => {
     const element = canvasContainerRef.current;
-    if (!element || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 720;
-      setDimensions({ width: Math.max(320, Math.floor(width)), height: GRAPH_CANVAS_HEIGHT });
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
+    if (!element) return;
+    
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width > 0) {
+        setDimensions({ width: Math.floor(rect.width), height: GRAPH_CANVAS_HEIGHT });
+      }
+    };
+    
+    // Initial measurement
+    updateSize();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => {
+        // We use getBoundingClientRect inside the observer to guarantee accurate painted width
+        updateSize();
+      });
+      observer.observe(element);
+      return () => observer.disconnect();
+    }
   }, []);
 
   const visibleGraph = useMemo(() => {
@@ -366,6 +378,17 @@ export default function GraphPage() {
 
   useEffect(() => {
     if (graphQuery.isPending || forceGraphData.nodes.length === 0) return;
+    
+    // Spread out the nodes using physics forces
+    if (forceGraphRef.current) {
+      // Increase repulsion (default is -30)
+      forceGraphRef.current.d3Force("charge")?.strength(-400);
+      // Increase link distance (default is 30)
+      forceGraphRef.current.d3Force("link")?.distance(90);
+      // Center force gently pulls nodes to the middle
+      forceGraphRef.current.d3Force("center")?.strength(0.05);
+    }
+    
     const fit = () => forceGraphRef.current?.zoomToFit(300, 72);
     const frame = requestAnimationFrame(fit);
     const later = window.setTimeout(fit, 700);
@@ -404,13 +427,16 @@ export default function GraphPage() {
     ctx.restore();
   };
 
-  const renderLink = (link: GraphEdge, ctx: CanvasRenderingContext2D, globalScale: number) => {
+  const renderLink = (link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const sourceId = resolveNodeId(link.source);
     const targetId = resolveNodeId(link.target);
     const isActive = selectedNodeId === sourceId || selectedNodeId === targetId;
-    const sourceNode = nodeById.get(sourceId);
-    const targetNode = nodeById.get(targetId);
-    if (!sourceNode || !targetNode) return;
+    
+    // react-force-graph mutates link.source and link.target to point to the actual node objects with dynamic x/y
+    const sourceNode = typeof link.source === "object" ? link.source : nodeById.get(sourceId);
+    const targetNode = typeof link.target === "object" ? link.target : nodeById.get(targetId);
+    
+    if (!sourceNode || !targetNode || sourceNode.x === undefined || targetNode.x === undefined) return;
 
     const midX = (sourceNode.x + targetNode.x) / 2;
     const midY = (sourceNode.y + targetNode.y) / 2;
@@ -504,7 +530,7 @@ export default function GraphPage() {
               </div>
             </div>
 
-            <div ref={canvasContainerRef} className="relative bg-cream-light/40">
+            <div ref={canvasContainerRef} className="relative w-full bg-cream-light/40">
               <div className="relative h-[440px] w-full">
                 {graphQuery.isError ? (
                   <div className="flex h-full items-center justify-center p-6">

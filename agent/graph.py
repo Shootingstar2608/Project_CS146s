@@ -142,50 +142,61 @@ async def _run_local_retrieval_fallback(
     top_k: int,
     reason: Exception,
 ) -> dict:
-    from pipeline.retrieval.vector_retriever import retrieve_chunks
-
-    chunks = retrieve_chunks(user_query, top_k=top_k, refresh=True)
+    """Fallback when LLM is unavailable: try graph first, then vector."""
+    # Try Neo4j graph first
     papers = _get_paper_records(limit=max(top_k, 10))
 
-    if chunks:
-        evidence_lines = []
-        for index, chunk in enumerate(chunks, start=1):
-            title = getattr(chunk, "title", "") or getattr(chunk, "paper_id", "") or "Untitled paper"
-            section = getattr(chunk, "source_section", "") or "retrieved section"
-            evidence_lines.append(f"{index}. {title} ({section}): {_truncate(getattr(chunk, 'text', ''))}")
-
-        answer = (
-            "No LLM provider is configured, so I used the local GraphRAG retrieval fallback. "
-            "Based on the top retrieved passages, the relevant material is:\n\n"
-            + "\n".join(evidence_lines)
-        )
-    elif papers:
+    if papers:
         paper_lines = []
         for index, paper in enumerate(papers[:top_k], start=1):
             title = paper.get("title") or paper.get("paper_id") or "Untitled paper"
             abstract = _truncate(paper.get("abstract") or "No abstract stored.", 220)
-            paper_lines.append(f"{index}. {title}: {abstract}")
+            authors = ", ".join(paper.get("authors") or []) or "Unknown"
+            paper_lines.append(f"{index}. **{title}** ({paper.get('year', 'n/a')}) — {authors}\n   {abstract}")
         answer = (
-            "No LLM provider is configured, and no vector chunks matched yet. "
-            "I found these papers in the knowledge graph:\n\n"
+            "No LLM provider is configured. I retrieved the following papers directly "
+            "from the Knowledge Graph (Neo4j):\n\n"
             + "\n".join(paper_lines)
         )
+        reasoning_steps = [
+            "Detected unavailable LLM provider; switched to graph fallback.",
+            "Queried Neo4j Knowledge Graph for paper nodes.",
+            f"Found {len(papers)} papers in the graph.",
+            f"Fallback reason: {reason}",
+        ]
     else:
-        answer = (
-            "No LLM provider is configured, and I could not find indexed papers or chunks yet. "
-            "Upload a PDF, wait until it is indexed, then ask again."
-        )
+        # Graph empty, try vector
+        from pipeline.retrieval.vector_retriever import retrieve_chunks
+        chunks = retrieve_chunks(user_query, top_k=top_k, refresh=True)
+        if chunks:
+            evidence_lines = []
+            for index, chunk in enumerate(chunks, start=1):
+                title = getattr(chunk, "title", "") or getattr(chunk, "paper_id", "") or "Untitled paper"
+                section = getattr(chunk, "source_section", "") or "retrieved section"
+                evidence_lines.append(f"{index}. {title} ({section}): {_truncate(getattr(chunk, 'text', ''))}")
+            answer = (
+                "No LLM provider configured and graph is empty. "
+                "Used vector search supplementary fallback:\n\n"
+                + "\n".join(evidence_lines)
+            )
+        else:
+            answer = (
+                "No LLM provider is configured, and no indexed papers were found yet. "
+                "Upload a PDF and wait for indexing to complete, then ask again."
+            )
+        reasoning_steps = [
+            "Detected unavailable LLM provider.",
+            "Tried Neo4j Knowledge Graph — no papers found.",
+            "Fell back to FAISS vector search.",
+            f"Fallback reason: {reason}",
+        ]
+        chunks = chunks if papers else []
+        papers = papers or []
 
     return {
         "answer": answer,
-        "reasoning_steps": [
-            "Detected unavailable LLM provider; switched to local retrieval fallback.",
-            "Embedded the question with the configured local embedder.",
-            "Searched the FAISS vector index for relevant chunks.",
-            "Fetched matching paper records from Neo4j for source metadata.",
-            f"Fallback reason: {reason}",
-        ],
-        "graph_data": _build_fallback_graph_data(chunks, papers),
+        "reasoning_steps": reasoning_steps,
+        "graph_data": _build_fallback_graph_data([], papers),
     }
 
 
@@ -212,8 +223,8 @@ async def run_agent(
         "final_answer": "",
         "graph_data": {"nodes": [], "edges": []},
         "needs_more_info": False,
-        # Hybrid retrieval params — used by retriever node if implemented
-        "alpha": alpha_override if alpha_override is not None else 0.5,
+        # Graph-first hybrid retrieval params — alpha=0.2 → 80% KG, 20% vector
+        "alpha": alpha_override if alpha_override is not None else 0.2,
         "top_k": top_k,
     }
 

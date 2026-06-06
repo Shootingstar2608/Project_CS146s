@@ -53,7 +53,7 @@ class FusedResult:
 def reciprocal_rank_fusion(
     vector_results: List[RetrievedChunk],
     kg_results: List[Dict[str, Any]],
-    alpha: float = 0.5,
+    alpha: float = 0.2,
     k: int = 60,
 ) -> List[FusedResult]:
     """
@@ -127,7 +127,7 @@ def _record_title(record: Dict[str, Any]) -> str:
 def fuse_results(
     vector_results: List[RetrievedChunk],
     kg_results: List[Dict[str, Any]],
-    alpha: float = 0.5,
+    alpha: float = 0.2,
 ) -> List[FusedResult]:
     """Fuse with settings-default k."""
     from app.config import get_settings
@@ -170,9 +170,20 @@ def build_llm_context(
 
     parts: List[str] = []
 
-    # ── Semantic chunks ───────────────────────────────────────────────────────
+    # ── KG records (PRIMARY — Graph-first per assignment requirement) ─────────
+    if kg_items:
+        parts.append("## Structured Facts (Knowledge Graph — Primary Source)")
+        if cypher:
+            parts.append(f"Cypher: `{cypher}`")
+        for i, item in enumerate(kg_items, start=1):
+            parts.append(
+                f"[{i}] {json.dumps(item.kg_record, ensure_ascii=False, default=str)}"
+            )
+        parts.append("")
+
+    # ── Semantic chunks (SUPPLEMENTARY — only when graph results were sparse) ─
     if vector_items:
-        parts.append("## Semantic Context (retrieved paper chunks)")
+        parts.append("## Supplementary Context (vector search — used when graph results < 3)")
         for i, item in enumerate(vector_items, start=1):
             c = item.chunk
             authors_str = ", ".join(c.authors[:3]) if c.authors else "Unknown"
@@ -182,17 +193,6 @@ def build_llm_context(
             parts.append(c.text)
             parts.append(f"    *Authors: {authors_str}*")
             parts.append("")
-
-    # ── KG records ───────────────────────────────────────────────────────────
-    if kg_items:
-        parts.append("## Structured Facts (Knowledge Graph)")
-        if cypher:
-            parts.append(f"Cypher: `{cypher}`")
-        for i, item in enumerate(kg_items, start=1):
-            parts.append(
-                f"[{i}] {json.dumps(item.kg_record, ensure_ascii=False, default=str)}"
-            )
-        parts.append("")
 
     if not parts:
         parts.append("*No context retrieved.*")

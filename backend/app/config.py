@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     rerank_top_n: int = 5
     rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
+    # ── Entity Resolution ─────────────────────────────────────────────────────
+    er_fuzzy_threshold: float = 0.85   # Default fuzzy threshold for ER
+    er_llm_verify: bool = True         # Use LLM to verify borderline matches
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

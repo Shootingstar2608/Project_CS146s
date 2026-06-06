@@ -153,6 +153,20 @@ def ingest_pdf(
             "relation_count": kg_result.get("relation_count", 0),
         },
     )
+
+    # ── Step 8: Entity Resolution ─────────────────────────────────────────────
+    er_merged = 0
+    try:
+        from pipeline.resolution.entity_resolver import resolve_entities_for_paper
+        er_result = resolve_entities_for_paper(paper_id)
+        er_merged = er_result.get("merged_count", 0)
+        if er_merged > 0:
+            logger.info("[ingest] Entity Resolution merged %d duplicate entities", er_merged)
+        emit("resolution", f"Entity Resolution: merged {er_merged} duplicate entities.", {"merged_count": er_merged})
+    except Exception as exc:
+        logger.warning("[ingest] Entity Resolution failed (non-fatal): %s", exc)
+        emit("resolution", "Entity Resolution skipped.", {"error": str(exc)})
+
     return {
         "paper_id": paper_id,
         "title": title,
@@ -162,6 +176,7 @@ def ingest_pdf(
         "year": year,
         "entity_count": kg_result.get("entity_count", 0),
         "relation_count": kg_result.get("relation_count", 0),
+        "entities_merged": er_merged,
     }
 
 
